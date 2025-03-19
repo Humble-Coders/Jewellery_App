@@ -24,7 +24,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -34,6 +33,14 @@ import androidx.compose.ui.unit.sp
 import com.example.jewelleryapp.R
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material.icons.automirrored.outlined.ExitToApp
+import androidx.compose.material.icons.outlined.AttachMoney
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Headset
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.ui.graphics.vector.ImageVector
 import kotlinx.coroutines.launch
 
 // Data classes for future backend integration
@@ -128,21 +135,34 @@ fun HomeScreen() {
     )
 
     val scrollState = rememberScrollState()
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
 
-    Scaffold(
-        topBar = { TopAppbar("Gagan Jewellers") },
-        bottomBar = { BottomNavigationBar() }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .padding(paddingValues)
-                .verticalScroll(scrollState)
-        ) {
-            ImageCarousel(carouselItems)
-            CategoryRow(categories)
-            FeaturedCollection(featuredProducts)
-            CollectionsSection(collections)
-            RecentlyViewedSection(recentlyViewed)
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet(
+                modifier = Modifier.fillMaxWidth(0.75f)
+            ) {
+                DrawerContent { scope.launch { drawerState.close() } }
+            }
+        }
+    ) {
+        Scaffold(
+            topBar = { TopAppbar("Gagan Jewellers", onMenuClick = { scope.launch { drawerState.open() } })},
+            bottomBar = { BottomNavigationBar() }
+        ) { paddingValues ->
+            Column(
+                modifier = Modifier
+                    .padding(paddingValues)
+                    .verticalScroll(scrollState)
+            ) {
+                ImageCarousel(carouselItems)
+                CategoryRow(categories)
+                FeaturedCollection(featuredProducts)
+                CollectionsSection(collections)
+                RecentlyViewedSection(recentlyViewed)
+            }
         }
     }
 }
@@ -151,52 +171,57 @@ fun HomeScreen() {
 @Composable
 fun TopAppbar(
     title: String,
-    //   onMenuClick: () -> Unit = {},
-    //   onSearchClick: () -> Unit = {},
-//    onFavoriteClick: () -> Unit = {}
+    onMenuClick: () -> Unit = {}
 ) {
     val amberColor = Color(0xFFB78628) // Approximate amber/gold color
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color.White)
             .border(0.5.dp, Color.LightGray)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+            .windowInsetsPadding(WindowInsets.statusBars) // Ensures it appears below the notch
     ) {
-        IconButton(onClick = {}) {
-            Icon(
-                imageVector = Icons.Default.Menu,
-                contentDescription = "Menu",
-                tint = amberColor
-            )
-        }
-
-        Text(
-            text = title,
-            color = amberColor,
-            fontWeight = FontWeight.Medium
-        )
         Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = { } ) {
+            IconButton(onClick = onMenuClick) {
                 Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = "Search",
+                    imageVector = Icons.Default.Menu,
+                    contentDescription = "Menu",
                     tint = amberColor
                 )
             }
 
-            IconButton(onClick = { } ) {
-                Icon(
-                    imageVector = Icons.Default.FavoriteBorder,
-                    contentDescription = "Favorites",
-                    tint = amberColor
-                )
+            Text(
+                text = title,
+                color = amberColor,
+                fontWeight = FontWeight.Medium
+            )
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = { }) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search",
+                        tint = amberColor
+                    )
+                }
+
+                IconButton(onClick = { }) {
+                    Icon(
+                        imageVector = Icons.Default.FavoriteBorder,
+                        contentDescription = "Favorites",
+                        tint = amberColor
+                    )
+                }
             }
         }
     }
@@ -616,4 +641,121 @@ fun BottomNavigationBar() {
             )
         }
     }
+}
+
+//--------------------------------TopBarMenuUI------------------------------
+
+@Composable
+fun DrawerContent(onItemClick: () -> Unit) {
+
+    val amberColor = Color(0xFFB78628)
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White)
+            .padding(16.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(50.dp)
+                    .clip(CircleShape)
+                    .background(amberColor, CircleShape) // Gold Border
+                    .padding(3.dp) // Padding for border effect
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.ic_launcher_background), // Replace with your image
+                    contentDescription = "Profile Picture",
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Text(
+                text = "Hi ___!",
+                fontWeight = FontWeight.Bold,
+                fontSize = 22.sp,
+                modifier = Modifier.padding(bottom = 8.dp),
+                color = Color.Black
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        HorizontalDivider(thickness = 1.dp, color = Color.LightGray) // 👈 Line under "Hi Shreya!"
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        DrawerItem(icon = Icons.Outlined.Person, text = "My Profile", onClick = onItemClick)
+        DrawerItem(icon = Icons.Outlined.History, text = "Order History", onClick = onItemClick)
+
+        SectionHeader("Shop By")
+        DrawerItem("All Jewellery", onItemClick)
+        DrawerItem("Metal", onItemClick)
+        DrawerItem("Collections", onItemClick)
+
+        SectionHeader("Shop For")
+        DrawerItem("Men", onItemClick)
+        DrawerItem("Kids", onItemClick)
+
+        SectionHeader("More")
+        DrawerItem(icon = Icons.Outlined.AttachMoney, text = "Gold Rate", onClick = onItemClick)
+        DrawerItem(icon = Icons.Outlined.Headset, text = "Get In Touch", onClick = onItemClick)
+        DrawerItem(icon = Icons.Outlined.LocationOn, text = "Store Locator", onClick = onItemClick)
+        DrawerItem(
+            icon = Icons.AutoMirrored.Outlined.ExitToApp,
+            text = "Logout",
+            onClick = onItemClick
+        )
+    }
+}
+
+@Composable
+fun DrawerItem(text: String, onClick: () -> Unit, icon: ImageVector? = null) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 12.dp, horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = text,
+                tint = Color.DarkGray,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(16.dp)) // Space between icon & text
+        }
+        Text(
+            text = text,
+            fontSize = 18.sp,
+            modifier = Modifier.weight(1f), // Pushes text to the left
+            color = Color.Black
+        )
+        Icon(
+            imageVector = Icons.Outlined.ChevronRight, // Right arrow icon
+            contentDescription = "Arrow",
+            tint = Color.Gray
+        )
+    }
+}
+
+@Composable
+fun SectionHeader(text: String) {
+
+    val amberColor = Color(0xFFB78628)
+    Text(
+        text = text,
+        color = amberColor,
+        fontWeight = FontWeight.Bold,
+        fontSize = 14.sp,
+        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+    )
 }
