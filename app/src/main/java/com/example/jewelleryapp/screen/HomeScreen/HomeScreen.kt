@@ -1,4 +1,5 @@
-package com.example.jewelleryapp.screen.HomeScreen
+package com.example.jewelleryapp.screen.homeScreen
+
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -87,11 +88,11 @@ fun HomeScreen() {
             buttonText = "Discover"
         ),
         CarouselItem(id = "2",
-        imageResId = R.drawable.swipeable_img1,
-        title = "Timeless Elegance",
-        subtitle = "NEW COLLECTION",
-        buttonText = "Discover"
-    ),
+            imageResId = R.drawable.swipeable_img1,
+            title = "Timeless Elegance",
+            subtitle = "NEW COLLECTION",
+            buttonText = "Discover"
+        ),
         CarouselItem(
             id = "3",
             imageResId = R.drawable.swipeable_img1,
@@ -150,8 +151,8 @@ fun HomeScreen() {
 @Composable
 fun TopAppbar(
     title: String,
- //   onMenuClick: () -> Unit = {},
- //   onSearchClick: () -> Unit = {},
+    //   onMenuClick: () -> Unit = {},
+    //   onSearchClick: () -> Unit = {},
 //    onFavoriteClick: () -> Unit = {}
 ) {
     val amberColor = Color(0xFFB78628) // Approximate amber/gold color
@@ -201,7 +202,6 @@ fun TopAppbar(
     }
 }
 
-// Image carousel with dots indicator
 @Composable
 fun ImageCarousel(items: List<CarouselItem>) {
     Box(
@@ -247,6 +247,9 @@ fun ImageCarousel(items: List<CarouselItem>) {
                         fontWeight = FontWeight.Light
                     )
 
+                    // Increased spacing between subtitle and title
+                    Spacer(modifier = Modifier.height(8.dp))
+
                     Text(
                         text = item.title,
                         color = Color.White,
@@ -254,16 +257,17 @@ fun ImageCarousel(items: List<CarouselItem>) {
                         fontWeight = FontWeight.Bold
                     )
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    // Increased spacing between title and button
+                    Spacer(modifier = Modifier.height(16.dp))
 
+                    // Updated to make the button round
                     Button(
                         onClick = { /* Handle click */ },
-                        shape = RoundedCornerShape(8.dp),
+                        shape = CircleShape,
                         colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
                         modifier = Modifier
-                            .width(117.97.dp)
-                            .height(35.dp)// Adjust width as needed
-                            .border(1.dp, Color.White, RoundedCornerShape(8.dp)) // White border with 1dp thickness
+                            .height(40.dp)
+                            .border(1.dp, Color.White, CircleShape)
                     ) {
                         Text(
                             text = item.buttonText,
@@ -271,8 +275,6 @@ fun ImageCarousel(items: List<CarouselItem>) {
                             fontSize = 12.sp
                         )
                     }
-
-
                 }
             }
         }
@@ -310,7 +312,7 @@ fun CategoryRow(categories: List<Category>) {
         modifier = Modifier.padding(16.dp)
     ) {
         LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             items(categories) { category ->
                 CategoryItem(category)
@@ -372,7 +374,7 @@ fun FeaturedCollection(products: List<Product>) {
 fun SectionTitle(title: String) {
     Text(
         text = title,
-        fontSize = 18.sp,
+        fontSize = 24.sp,
         fontWeight = FontWeight.Bold
     )
 }
@@ -380,58 +382,68 @@ fun SectionTitle(title: String) {
 // Individual product item
 @Composable
 fun ProductItem(product: Product) {
-    Column(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { /* Handle click */ }
+            .clickable { /* Handle click */ },
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 2.dp
+        )
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(150.dp)
-        ) {
-            Image(
-                painter = painterResource(id = product.imageResId),
-                contentDescription = product.name,
+        Column {
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(8.dp)),
-                contentScale = ContentScale.Crop
-            )
-
-            // Favorite icon
-            IconButton(
-                onClick = { /* Handle favorite */ },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .size(32.dp)
+                    .fillMaxWidth()
+                    .height(150.dp)
             ) {
-                Icon(
-                    imageVector = if (product.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                    contentDescription = "Favorite",
-                    tint = if (product.isFavorite) Color.Red else Color.White
+                Image(
+                    painter = painterResource(id = product.imageResId),
+                    contentDescription = product.name,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+
+                // Favorite icon
+                IconButton(
+                    onClick = { /* Handle favorite */ },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = if (product.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = "Favorite",
+                        tint = if (product.isFavorite) Color.Red else Color.White
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier.padding(12.dp)
+            ) {
+                Text(
+                    text = product.name,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                Text(
+                    text = formatPrice(product.price, product.currency),
+                    fontSize = 14.sp,
+                    color = Color(0xFFB78628) // Amber/gold color for price
                 )
             }
         }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Text(
-            text = product.name,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-
-        Text(
-            text = formatPrice(product.price, product.currency),
-            fontSize = 14.sp,
-            color = Color.Gray
-        )
     }
 }
-
 // Collections section
 @Composable
 fun CollectionsSection(collections: List<Collection>) {
@@ -451,6 +463,7 @@ fun CollectionsSection(collections: List<Collection>) {
         }
     }
 }
+
 
 // Individual collection item
 @Composable
@@ -476,20 +489,31 @@ fun CollectionItem(collection: Collection) {
                 .background(Color.Black.copy(alpha = 0.4f))
         )
 
-        // Collection name
-        Text(
-            text = collection.name,
-            color = Color.White,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
+        // Collection name and View All text
+        Column(
             modifier = Modifier
-                .align(Alignment.Center)
+                .align(Alignment.BottomStart)
                 .padding(16.dp)
-        )
+        ) {
+            Text(
+                text = collection.name,
+                color = Color.White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            Text(
+                text = "View All",
+                color = Color(0xFFB4A06C),
+                fontSize = 12.sp
+            )
+        }
     }
 }
 
+
 // Recently viewed section
+// Update the Recently Viewed section to match the design
 @Composable
 fun RecentlyViewedSection(products: List<Product>) {
     Column(
@@ -500,7 +524,7 @@ fun RecentlyViewedSection(products: List<Product>) {
         Spacer(modifier = Modifier.height(8.dp))
 
         LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp) // Slightly reduced spacing
         ) {
             items(products) { product ->
                 RecentlyViewedItem(product)
@@ -514,33 +538,53 @@ fun RecentlyViewedSection(products: List<Product>) {
 fun RecentlyViewedItem(product: Product) {
     Column(
         modifier = Modifier
-            .width(100.dp)
+            .width(120.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.Black)
             .clickable { /* Handle click */ }
     ) {
-        // Increased height from 100.dp to 140.dp
+        // Image
         Image(
             painter = painterResource(id = product.imageResId),
             contentDescription = product.name,
             modifier = Modifier
-                .size(width = 100.dp, height = 140.dp)
-                .clip(RoundedCornerShape(8.dp)),
+                .fillMaxWidth()
+                .height(130.dp),
             contentScale = ContentScale.Crop
         )
 
-        Spacer(modifier = Modifier.height(4.dp))
+        // Product info on black background
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            Text(
+                text = product.name,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
 
-        Text(
-            text = product.name,
-            fontSize = 12.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+            Spacer(modifier = Modifier.height(2.dp))
+
+            Text(
+                text = formatPrice(product.price, product.currency),
+                fontSize = 14.sp,
+                color = Color(0xFFB4A06C), // Gold/amber color for price
+                fontWeight = FontWeight.Bold
+            )
+        }
     }
 }
 
 // Bottom navigation bar
 @Composable
 fun BottomNavigationBar() {
+    val amberColor = Color(0xFFB4A06C) // Amber/gold color for all icons
+
     NavigationBar(
         containerColor = Color.White
     ) {
@@ -553,8 +597,20 @@ fun BottomNavigationBar() {
 
         items.forEach { (icon, label, selected) ->
             NavigationBarItem(
-                icon = { Icon(icon, contentDescription = label) },
-                label = { Text(label, fontSize = 12.sp) },
+                icon = {
+                    Icon(
+                        icon,
+                        contentDescription = label,
+                        tint = amberColor // All icons use the amber color
+                    )
+                },
+                label = {
+                    Text(
+                        text = label,
+                        fontSize = 12.sp,
+                        color = if (selected) amberColor else Color.Gray
+                    )
+                },
                 selected = selected,
                 onClick = { /* Handle navigation */ }
             )
