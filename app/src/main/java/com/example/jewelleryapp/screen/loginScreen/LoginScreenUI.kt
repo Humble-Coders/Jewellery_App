@@ -1,3 +1,4 @@
+// LoginScreen.kt (modified)
 package com.example.jewelleryapp.screen.loginScreen
 
 import androidx.compose.foundation.BorderStroke
@@ -17,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -26,62 +28,134 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
 import com.example.jewelleryapp.R
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
+import com.google.firebase.auth.GoogleAuthProvider
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 
+
+
+val GoldenShade = Color(0xFFB8A164)
 @Composable
-fun LoginScreen() {
+fun LoginScreen(viewModel: LoginViewModel, navController: NavController) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var isPasswordVisible by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(false) }
-
+    val loginState by viewModel.loginState.collectAsState()
+    val scaffoldState = rememberScaffoldState()
+    val context = LocalContext.current
     val focusManager = LocalFocusManager.current
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-            .background(Color.White)
-            .clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() }
-            ) {
-                focusManager.clearFocus()
-            },
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        BrandHeader()
-        Spacer(Modifier.padding(28.dp))
+    // Check if user is already logged in
+    LaunchedEffect(Unit) {
+        if (viewModel.isUserLoggedIn()) {
+            navController.navigate("home") {
+                popUpTo("login") { inclusive = true }
+            }
+        }
+    }
 
-        WelcomeSection()
+    // Handle login state changes
+    LaunchedEffect(loginState) {
+        when (loginState) {
+            is LoginState.Success -> {
+                navController.navigate("home") {
+                    popUpTo("login") { inclusive = true }
+                }
+                viewModel.resetState()
+            }
+            is LoginState.Error -> {
+                scaffoldState.snackbarHostState.showSnackbar(
+                    message = (loginState as LoginState.Error).message
+                )
+                viewModel.resetState()
+            }
+            is LoginState.PasswordResetSent -> {
+                scaffoldState.snackbarHostState.showSnackbar(
+                    message = "Password reset email sent. Check your inbox."
+                )
+                viewModel.resetState()
+            }
+            else -> {}
+        }
+    }
 
-        EmailInput(email = email, onEmailChange = { email = it })
-        Spacer(modifier = Modifier.height(16.dp))
-
-        PasswordInput(
-            password = password,
-            isPasswordVisible = isPasswordVisible,
-            onPasswordChange = { password = it },
-            onTogglePasswordVisibility = { isPasswordVisible = !isPasswordVisible },
-            onForgotPasswordClick = { /* Handle forgot password */ }
-        )
 
 
-        Spacer(modifier = Modifier.height(31.dp))
+    Scaffold(
+        scaffoldState = scaffoldState
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .background(Color.White)
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() }
+                ) {
+                    focusManager.clearFocus()
+                },
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            BrandHeader()
+            Spacer(Modifier.padding(28.dp))
 
-        SignInButton(isLoading = isLoading)
+            WelcomeSection()
 
-        AlternativeSignInOptions(isLoading = isLoading)
+            EmailInput(email = email, onEmailChange = { email = it })
+            Spacer(modifier = Modifier.height(16.dp))
 
-        Spacer(modifier = Modifier.padding(22.dp))
+            PasswordInput(
+                password = password,
+                isPasswordVisible = isPasswordVisible,
+                onPasswordChange = { password = it },
+                onTogglePasswordVisibility = { isPasswordVisible = !isPasswordVisible },
+                onForgotPasswordClick = {
+                    if (email.isNotEmpty()) {
+                        viewModel.resetPassword(email)
+                    } else {
+                        // Show error that email is required
+                    }
+                }
+            )
 
-        SignUpPrompt()
+            Spacer(modifier = Modifier.height(31.dp))
+
+            SignInButton(
+                isLoading = loginState is LoginState.Loading,
+                onClick = {
+                    focusManager.clearFocus()
+                    viewModel.signInWithEmailAndPassword(email, password)
+                }
+            )
+
+            AlternativeSignInOptions(
+                isLoading = loginState is LoginState.Loading,
+                onGoogleSignInClick = {
+                   //sign in with google
+                }
+            )
+
+            Spacer(modifier = Modifier.padding(22.dp))
+
+            SignUpPrompt(
+                onSignUpClick = {
+                    // Navigate to sign up screen
+                    navController.navigate("register")
+                }
+            )
+        }
     }
 }
 
 @Composable
-private fun BrandHeader() {
-    Spacer(modifier = Modifier.height(24.dp))
+fun BrandHeader() {
+    Spacer(modifier = Modifier.height(60.dp))
 
     Image(
         painter = painterResource(id = R.drawable.crown),
@@ -89,12 +163,12 @@ private fun BrandHeader() {
         modifier = Modifier.size(80.dp)
     )
 
-    Spacer(modifier = Modifier.height(8.dp))
+    Spacer(modifier = Modifier.height(4.dp))
     Text(
         text = "Gagan Jewellers",
         fontSize = 35.sp,
         fontWeight = FontWeight.SemiBold,
-        color = Color(0xFFC4A661)
+        color = GoldenShade
     )
 }
 
@@ -200,14 +274,14 @@ private fun PasswordVisibilityToggle(
 }
 
 @Composable
-private fun SignInButton(isLoading: Boolean) {
+private fun SignInButton(isLoading: Boolean, onClick: () -> Unit) {
     Button(
-        onClick = { /* Handle sign in */ },
+        onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
             .height(56.dp),
         colors = ButtonDefaults.buttonColors(
-            backgroundColor = Color(0xFFC4A661)
+            backgroundColor = GoldenShade
         ),
         shape = RoundedCornerShape(8.dp),
         enabled = !isLoading
@@ -229,7 +303,7 @@ private fun SignInButton(isLoading: Boolean) {
 }
 
 @Composable
-private fun AlternativeSignInOptions(isLoading: Boolean) {
+private fun AlternativeSignInOptions(isLoading: Boolean, onGoogleSignInClick: () -> Unit) {
     Spacer(modifier = Modifier.height(24.dp))
 
     Row(
@@ -244,7 +318,7 @@ private fun AlternativeSignInOptions(isLoading: Boolean) {
     Spacer(modifier = Modifier.height(29.dp))
 
     OutlinedButton(
-        onClick = { /* Handle Google sign in */ },
+        onClick = onGoogleSignInClick,
         modifier = Modifier
             .fillMaxWidth()
             .height(56.dp),
@@ -266,7 +340,7 @@ private fun AlternativeSignInOptions(isLoading: Boolean) {
 }
 
 @Composable
-private fun SignUpPrompt() {
+private fun SignUpPrompt(onSignUpClick: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.Center,
@@ -278,7 +352,7 @@ private fun SignUpPrompt() {
             fontSize = 14.sp,
             fontWeight = FontWeight.W600,
             color = Color(0xFFC4A661),
-            modifier = Modifier.clickable { /* Handle sign up */ }
+            modifier = Modifier.clickable(onClick = onSignUpClick)
         )
     }
 }
