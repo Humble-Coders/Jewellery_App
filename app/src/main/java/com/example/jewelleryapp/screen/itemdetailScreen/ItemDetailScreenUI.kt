@@ -54,6 +54,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.jewelleryapp.R
+import com.example.jewelleryapp.screen.homeScreen.BottomNavigationBar
 import kotlinx.coroutines.launch
 
 // Defined colors as constants
@@ -119,7 +120,8 @@ fun JewelryProductScreen(
                 onWishlistClick = { isWishlisted = !isWishlisted },
                 onShareClick = onShareClick
             )
-        }
+        },
+        bottomBar = { BottomNavigationBar() }
     ) { paddingValues ->
         Column(
             modifier = Modifier
