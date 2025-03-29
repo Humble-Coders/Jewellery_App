@@ -37,8 +37,6 @@ import com.google.firebase.auth.GoogleAuthProvider
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 
-
-
 val GoldenShade = Color(0xFFB8A164)
 @Composable
 fun LoginScreen(viewModel: LoginViewModel, navController: NavController) {
