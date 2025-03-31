@@ -1,6 +1,5 @@
 package com.example.jewelleryapp.screen.homeScreen
 
-
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -17,22 +16,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.example.jewelleryapp.R
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.automirrored.outlined.ExitToApp
 import androidx.compose.material.icons.outlined.AttachMoney
 import androidx.compose.material.icons.outlined.ChevronRight
@@ -40,38 +23,32 @@ import androidx.compose.material.icons.outlined.Headset
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.example.jewelleryapp.R
+import com.example.jewelleryapp.model.Category
+import com.example.jewelleryapp.model.CarouselItem as CarouselItemModel
+import com.example.jewelleryapp.model.Category as CategoryModel
+import com.example.jewelleryapp.model.Collection as CollectionModel
+import com.example.jewelleryapp.model.Product as ProductModel
 import kotlinx.coroutines.launch
-
-// Data classes for future backend integration
-data class Category(
-    val id: String,
-    val name: String,
-    val imageResId: Int
-)
-
-data class Product(
-    val id: String,
-    val name: String,
-    val price: Double,
-    val currency: String = "USD",
-    val imageResId: Int,
-    val isFavorite: Boolean = false
-)
-
-data class Collection(
-    val id: String,
-    val name: String,
-    val imageResId: Int
-)
-
-data class CarouselItem(
-    val id: String,
-    val imageResId: Int,
-    val title: String,
-    val subtitle: String,
-    val buttonText: String
-)
 
 // Function to format price with currency
 fun formatPrice(price: Double, currency: String): String {
@@ -84,55 +61,20 @@ fun formatPrice(price: Double, currency: String): String {
 
 // Main screen composable
 @Composable
-fun HomeScreen() {
-    // Sample data - would be replaced with API data
-    val carouselItems = listOf(
-        CarouselItem(
-            id = "1",
-            imageResId = R.drawable.swipeable_img1,
-            title = "Timeless Elegance",
-            subtitle = "NEW COLLECTION",
-            buttonText = "Discover"
-        ),
-        CarouselItem(id = "2",
-            imageResId = R.drawable.swipeable_img1,
-            title = "Timeless Elegance",
-            subtitle = "NEW COLLECTION",
-            buttonText = "Discover"
-        ),
-        CarouselItem(
-            id = "3",
-            imageResId = R.drawable.swipeable_img1,
-            title = "Timeless Elegance",
-            subtitle = "NEW COLLECTION",
-            buttonText = "Discover"
-        )
-    )
-
-    val categories = listOf(
-        Category("1", "Necklaces", R.drawable.necklace_homescreen),
-        Category("2", "Earrings", R.drawable.earrings_homescreen),
-        Category("3", "Rings", R.drawable.diamondring_homescreen),
-        Category("4", "Bracelets", R.drawable.goldbracelet_homescreen)
-    )
-
-    val featuredProducts = listOf(
-        Product("1", "Diamond Eternity Ring", 4200.0, "USD", R.drawable.diamondring_homescreen, false),
-        Product("2", "Pearl Necklace", 1800.0, "USD", R.drawable.necklace_homescreen, false),
-        Product("3", "Sapphire Earrings", 3200.0, "USD", R.drawable.earrings_homescreen, false),
-        Product("4", "Gold Bracelet", 1500.0, "USD", R.drawable.goldbracelet_homescreen, false)
-    )
-
-    val collections = listOf(
-        Collection("1", "Royal Collection", R.drawable.collectioin_img1),
-        Collection("2", "Bridal Collection", R.drawable.collections_pic3)
-    )
-
-    val recentlyViewed = listOf(
-        Product("5", "Diamond Ring", 3800.0, "USD", R.drawable.diamondring_homescreen, false),
-        Product("6", "Gold Bracelet", 950.0, "USD", R.drawable.recentlyviewed_pic2, false),
-        Product("7", "Pearl Earrings", 1200.0, "USD", R.drawable.recentlyviewed_pic3, false)
-    )
+fun HomeScreen(
+    viewModel: HomeViewModel,
+    onCategoryClick: (String) -> Unit = {},
+    onProductClick: (String) -> Unit = {},
+    onCollectionClick: (String) -> Unit = {}
+) {
+    // Collect state flows
+    val categories by viewModel.categories.collectAsState()
+    val featuredProducts by viewModel.featuredProducts.collectAsState()
+    val collections by viewModel.collections.collectAsState()
+    val carouselItems by viewModel.carouselItems.collectAsState()
+    val recentlyViewed by viewModel.recentlyViewedProducts.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
 
     val scrollState = rememberScrollState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -152,16 +94,53 @@ fun HomeScreen() {
             topBar = { TopAppbar("Gagan Jewellers", onMenuClick = { scope.launch { drawerState.open() } })},
             bottomBar = { BottomNavigationBar() }
         ) { paddingValues ->
-            Column(
-                modifier = Modifier
-                    .padding(paddingValues)
-                    .verticalScroll(scrollState)
-            ) {
-                ImageCarousel(carouselItems)
-                CategoryRow(categories)
-                FeaturedCollection(featuredProducts)
-                CollectionsSection(collections)
-                RecentlyViewedSection(recentlyViewed)
+            if (isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = Color(0xFFB78628))
+                }
+            } else if (error != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "Something went wrong",
+                            color = Color.Red,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = { viewModel.refreshData() },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFB78628)
+                            )
+                        ) {
+                            Text("Try Again")
+                        }
+                    }
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .padding(paddingValues)
+                        .verticalScroll(scrollState)
+                ) {
+                    ImageCarousel(carouselItems)
+                    CategoryRow(categories, onCategoryClick)
+                    FeaturedProductsSection(featuredProducts, onProductClick)
+                    ThemedCollectionsSection(collections, onCollectionClick)
+                }
             }
         }
     }
@@ -228,7 +207,9 @@ fun TopAppbar(
 }
 
 @Composable
-fun ImageCarousel(items: List<CarouselItem>) {
+fun ImageCarousel(items: List<CarouselItemModel>) {
+    if (items.isEmpty()) return
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -243,13 +224,16 @@ fun ImageCarousel(items: List<CarouselItem>) {
         ) { page ->
             val item = items[page]
             Box(modifier = Modifier.fillMaxSize()) {
-
-                // Use Image with painterResource
-                Image(
-                    painter = painterResource(id = item.imageResId),
+                // Use AsyncImage with Coil to load from URL
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(item.imageUrl)
+                        .crossfade(true)
+                        .build(),
                     contentDescription = item.title,
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Crop,
+                    placeholder = painterResource(id = R.drawable.swipeable_img1) // Use placeholder from resources
                 )
 
                 // Overlay with text
@@ -332,7 +316,9 @@ fun ImageCarousel(items: List<CarouselItem>) {
 
 // Category row with circular images
 @Composable
-fun CategoryRow(categories: List<Category>) {
+fun CategoryRow(categories: List<Category>, onCategoryClick: (String) -> Unit) {
+    if (categories.isEmpty()) return
+
     Column(
         modifier = Modifier.padding(16.dp)
     ) {
@@ -340,7 +326,7 @@ fun CategoryRow(categories: List<Category>) {
             horizontalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             items(categories) { category ->
-                CategoryItem(category)
+                CategoryItem(category, onCategoryClick)
             }
         }
     }
@@ -348,17 +334,23 @@ fun CategoryRow(categories: List<Category>) {
 
 // Individual category item
 @Composable
-fun CategoryItem(category: Category) {
+fun CategoryItem(category: CategoryModel, onCategoryClick: (String) -> Unit) {
     Column(
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable { onCategoryClick(category.id) }
     ) {
-        Image(
-            painter = painterResource(id = category.imageResId),
+        // Use AsyncImage with Coil to load from URL
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(category.imageUrl)
+                .crossfade(true)
+                .build(),
             contentDescription = category.name,
             modifier = Modifier
                 .size(60.dp)
                 .clip(CircleShape),
-            contentScale = ContentScale.Crop
+            contentScale = ContentScale.Crop,
+            placeholder = painterResource(id = R.drawable.necklace_homescreen) // Placeholder from resources
         )
 
         Spacer(modifier = Modifier.height(4.dp))
@@ -371,13 +363,15 @@ fun CategoryItem(category: Category) {
     }
 }
 
-// Featured collection section
+// Featured products section
 @Composable
-fun FeaturedCollection(products: List<Product>) {
+fun FeaturedProductsSection(products: List<ProductModel>, onProductClick: (String) -> Unit) {
+    if (products.isEmpty()) return
+
     Column(
         modifier = Modifier.padding(16.dp)
     ) {
-        SectionTitle("Featured Collection")
+        SectionTitle("Featured Products")
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -388,7 +382,7 @@ fun FeaturedCollection(products: List<Product>) {
             modifier = Modifier.height(350.dp)
         ) {
             items(products) { product ->
-                ProductItem(product)
+                ProductItem(product, onProductClick)
             }
         }
     }
@@ -406,11 +400,11 @@ fun SectionTitle(title: String) {
 
 // Individual product item
 @Composable
-fun ProductItem(product: Product) {
+fun ProductItem(product: ProductModel, onProductClick: (String) -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { /* Handle click */ },
+            .clickable { onProductClick(product.id) },
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color.White
@@ -425,11 +419,16 @@ fun ProductItem(product: Product) {
                     .fillMaxWidth()
                     .height(150.dp)
             ) {
-                Image(
-                    painter = painterResource(id = product.imageResId),
+                // Use AsyncImage with Coil to load from URL
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(product.imageUrl)
+                        .crossfade(true)
+                        .build(),
                     contentDescription = product.name,
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Crop,
+                    placeholder = painterResource(id = R.drawable.diamondring_homescreen) // Placeholder from resources
                 )
 
                 // Favorite icon
@@ -469,13 +468,16 @@ fun ProductItem(product: Product) {
         }
     }
 }
-// Collections section
+
+// Themed Collections section
 @Composable
-fun CollectionsSection(collections: List<Collection>) {
+fun ThemedCollectionsSection(collections: List<CollectionModel>, onCollectionClick: (String) -> Unit) {
+    if (collections.isEmpty()) return
+
     Column(
         modifier = Modifier.padding(16.dp)
     ) {
-        SectionTitle("Collections")
+        SectionTitle("Themed Collections")
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -483,129 +485,79 @@ fun CollectionsSection(collections: List<Collection>) {
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             items(collections) { collection ->
-                CollectionItem(collection)
+                CollectionItem(collection, onCollectionClick)
             }
         }
     }
 }
 
-
 // Individual collection item
 @Composable
-fun CollectionItem(collection: Collection) {
+fun CollectionItem(collection: CollectionModel, onCollectionClick: (String) -> Unit) {
     Box(
         modifier = Modifier
-            .width(200.dp)
-            .height(120.dp)
+            .width(280.dp) // Increased width to fit description
+            .height(140.dp) // Increased height to fit description
             .clip(RoundedCornerShape(8.dp))
-            .clickable { /* Handle click */ }
+            .clickable { onCollectionClick(collection.id) }
     ) {
-        Image(
-            painter = painterResource(id = collection.imageResId),
+        // Use AsyncImage with Coil to load from URL
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(collection.imageUrl)
+                .crossfade(true)
+                .build(),
             contentDescription = collection.name,
             modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
+            contentScale = ContentScale.Crop,
+            placeholder = painterResource(id = R.drawable.collectioin_img1) // Placeholder from resources
         )
 
         // Dark overlay
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.4f))
+                .background(Color.Black.copy(alpha = 0.5f)) // Slightly darker overlay
         )
 
-        // Collection name and View All text
+        // Collection name, description and View All text
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(16.dp)
+                .fillMaxWidth(0.85f) // Limit width of text
         ) {
             Text(
                 text = collection.name,
                 color = Color.White,
-                fontSize = 16.sp,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold
             )
 
+            Spacer(modifier = Modifier.height(4.dp))
+
             Text(
-                text = "View All",
-                color = Color(0xFFB4A06C),
-                fontSize = 12.sp
-            )
-        }
-    }
-}
-
-
-// Recently viewed section
-// Update the Recently Viewed section to match the design
-@Composable
-fun RecentlyViewedSection(products: List<Product>) {
-    Column(
-        modifier = Modifier.padding(16.dp)
-    ) {
-        SectionTitle("Recently Viewed")
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(12.dp) // Slightly reduced spacing
-        ) {
-            items(products) { product ->
-                RecentlyViewedItem(product)
-            }
-        }
-    }
-}
-
-// Individual recently viewed item with increased height
-@Composable
-fun RecentlyViewedItem(product: Product) {
-    Column(
-        modifier = Modifier
-            .width(120.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color.Black)
-            .clickable { /* Handle click */ }
-    ) {
-        // Image
-        Image(
-            painter = painterResource(id = product.imageResId),
-            contentDescription = product.name,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(130.dp),
-            contentScale = ContentScale.Crop
-        )
-
-        // Product info on black background
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp)
-        ) {
-            Text(
-                text = product.name,
+                text = collection.description,
+                color = Color.White.copy(alpha = 0.8f),
                 fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color.White,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
 
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = formatPrice(product.price, product.currency),
-                fontSize = 14.sp,
-                color = Color(0xFFB4A06C), // Gold/amber color for price
-                fontWeight = FontWeight.Bold
+                text = "View Collection",
+                color = Color(0xFFB4A06C),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
             )
         }
     }
 }
 
-// Bottom navigation bar
+// Removed Recently Viewed section as requested
+
 @Composable
 fun BottomNavigationBar() {
     val amberColor = Color(0xFFB4A06C) // Amber/gold color for all icons
@@ -642,8 +594,6 @@ fun BottomNavigationBar() {
         }
     }
 }
-
-//--------------------------------TopBarMenuUI------------------------------
 
 @Composable
 fun DrawerContent(onItemClick: () -> Unit) {

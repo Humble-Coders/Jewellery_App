@@ -12,13 +12,18 @@ android {
     defaultConfig {
         applicationId = "com.example.jewelleryapp"
         minSdk = 24
-
-
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    // Add this packaging block to exclude the problematic META-INF file
+    packaging {
+        resources {
+            excludes += "META-INF/androidx.emoji2_emoji2.version"
+        }
     }
 
     buildTypes {
@@ -43,41 +48,43 @@ android {
 }
 
 dependencies {
+    // Core Android dependencies
+    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation("com.google.android.material:material:1.11.0")
 
+    // Jetpack Compose
+    implementation("androidx.compose.ui:ui:1.5.4")
+    implementation("androidx.compose.material:material:1.5.4")
+    implementation("androidx.compose.ui:ui-tooling-preview:1.5.4")
+    implementation("androidx.activity:activity-compose:1.8.2")
+    debugImplementation("androidx.compose.ui:ui-tooling:1.5.4")
 
-        // Core Android dependencies
-        implementation("androidx.core:core-ktx:1.12.0")
-        implementation("androidx.appcompat:appcompat:1.6.1")
-        implementation("com.google.android.material:material:1.11.0")
+    // ViewModel and LiveData
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.2")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2")
 
-        // Jetpack Compose
-        implementation("androidx.compose.ui:ui:1.5.4")
-        implementation("androidx.compose.material:material:1.5.4")
-        implementation("androidx.compose.ui:ui-tooling-preview:1.5.4")
-        implementation("androidx.activity:activity-compose:1.8.2")
-        debugImplementation("androidx.compose.ui:ui-tooling:1.5.4")
+    // Coroutines
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
 
-        // ViewModel and LiveData
-        implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.2")
-        implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
-        implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2")
+    // Navigation Compose
+    implementation("androidx.navigation:navigation-compose:2.7.6")
 
-        // Coroutines
-        implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-        implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+    implementation("io.coil-kt:coil-compose:2.5.0")
 
-        // Navigation Compose
-        implementation("androidx.navigation:navigation-compose:2.7.6")
-
-        // For Google Sign-In (if you're actually implementing it)
-        implementation(libs.play.services.auth)
-        implementation(libs.androidx.material.icons.extended)
+    // For Google Sign-In (if you're actually implementing it)
+    implementation(libs.play.services.auth)
+    implementation(libs.androidx.material.icons.extended)
 
     //Dependencies from denis course
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
 
+    //firebase storage
+    implementation (libs.firebase.storage.ktx);
 
 
     implementation(libs.firebase.analytics)
