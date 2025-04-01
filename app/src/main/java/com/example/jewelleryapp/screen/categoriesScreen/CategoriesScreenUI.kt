@@ -10,6 +10,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -20,12 +22,20 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
+import coil.compose.AsyncImage
 import com.example.jewelleryapp.R
 import com.example.jewelleryapp.screen.homeScreen.BottomNavigationBar
 import com.example.jewelleryapp.screen.homeScreen.TopAppbar
+import com.example.jewelleryapp.model.Category
 
+// CategoriesScreen.kt
 @Composable
-fun CategoryScreenView() {
+fun CategoryScreenView(viewModel: CategoriesViewModel) {
+    val categories by viewModel.categories.collectAsState()
+    val collections by viewModel.collections.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+
     Scaffold(
         topBar = {
             Box(modifier = Modifier.statusBarsPadding()) {
@@ -40,83 +50,85 @@ fun CategoryScreenView() {
                 .background(Color.White)
                 .padding(paddingValues)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 8.dp) // Reduced padding
-            ) {
-                CategoryRowView(
-                    listOf(
-                        CategoryData1(R.drawable.diamondring_homescreen, "Rings", "150+ Items"),
-                        CategoryData1(R.drawable.diamondring_homescreen, "Necklaces", "120+ Items")
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)
+                ) {
+                    // Display categories in pairs
+                    categories.chunked(2).forEach { pair ->
+                        CategoryRowView(
+                            listOf(
+                                pair.getOrNull(0),
+                                pair.getOrNull(1)
+                            ).filterNotNull()
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Text(
+                        text = "Featured Collections",
+                        style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.Black),
+                        modifier = Modifier.padding(start = 8.dp, bottom = 12.dp)
                     )
-                )
-                Spacer(modifier = Modifier.height(16.dp))
 
-                CategoryRowView(
-                    listOf(
-                        CategoryData1(R.drawable.diamondring_homescreen, "Earrings", "90+ Items"),
-                        CategoryData1(R.drawable.diamondring_homescreen, "Bracelets", "80+ Items")
-                    )
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-
-                CategoryRowView(
-                    listOf(
-                        CategoryData1(R.drawable.diamondring_homescreen, "Pendants", "60+ Items"),
-                        CategoryData1(R.drawable.diamondring_homescreen, "Wedding", "200+ Items")
-                    )
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Text(
-                    text = "Featured Collections",
-                    style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.Black),
-                    modifier = Modifier.padding(start = 8.dp, bottom = 12.dp) // Adjusted padding
-                )
-
-                FeaturedCollectionView(R.drawable.diamondring_homescreen, "Royal Collection") {}
-                Spacer(modifier = Modifier.height(12.dp))
-
-                FeaturedCollectionView(R.drawable.diamondring_homescreen, "Bridal Sets") {}
-                Spacer(modifier = Modifier.height(12.dp))
-
-                FeaturedCollectionView(R.drawable.diamondring_homescreen, "Limited Edition") {}
-
-                Spacer(modifier = Modifier.height(16.dp))
+                    collections.forEach { collection ->
+                        FeaturedCollectionView(
+                            imageUrl = collection.imageUrl,
+                            title = collection.name,
+                            onClick = {}
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+                }
             }
         }
     }
 }
 
+// Updated composables to use network images
 @Composable
-fun CategoryRowView(categories: List<CategoryData1>) {
+fun CategoryRowView(categories: List<Category>) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp), // Reduced padding
-        horizontalArrangement = Arrangement.spacedBy(6.dp) // Reduced spacing
+            .padding(horizontal = 0.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly
     ) {
         categories.forEach { category ->
-            CategoryCardView(category.image, category.title, category.itemCount) {}
+            CategoryCardView(
+                imageUrl = category.imageUrl,
+                title = category.name,
+                itemCount = "150+ Items", // You might want to get this from your data
+                onClick = {}
+            )
         }
     }
 }
 
 @Composable
-fun CategoryCardView(image: Int, title: String, itemCount: String, onClick: () -> Unit) {
+fun CategoryCardView(
+    imageUrl: String,
+    title: String,
+    itemCount: String,
+    onClick: () -> Unit
+) {
     Card(
         modifier = Modifier
-            .size(width = 185.dp, height = 130.dp) // Increased width
+            .size(width = 190.dp, height = 130.dp)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Box {
-            Image(
-                painter = painterResource(id = image),
+            AsyncImage(
+                model = imageUrl,
                 contentDescription = title,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
@@ -139,19 +151,23 @@ fun CategoryCardView(image: Int, title: String, itemCount: String, onClick: () -
 }
 
 @Composable
-fun FeaturedCollectionView(image: Int, title: String, onClick: () -> Unit) {
+fun FeaturedCollectionView(
+    imageUrl: String,
+    title: String,
+    onClick: () -> Unit
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp) // Reduced padding
+            .padding(horizontal = 8.dp)
             .height(80.dp)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Box {
-            Image(
-                painter = painterResource(id = image),
+            AsyncImage(
+                model = imageUrl,
                 contentDescription = title,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
@@ -196,7 +212,4 @@ fun FeaturedCollectionView(image: Int, title: String, onClick: () -> Unit) {
         }
     }
 }
-
-
-data class CategoryData1(val image: Int, val title: String, val itemCount: String)
 

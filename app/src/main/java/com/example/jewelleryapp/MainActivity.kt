@@ -15,6 +15,8 @@ import androidx.navigation.compose.rememberNavController
 import com.example.jewelleryapp.repository.FirebaseAuthRepository
 import com.example.jewelleryapp.repository.FirebaseStorageHelper
 import com.example.jewelleryapp.repository.JewelryRepository
+import com.example.jewelleryapp.screen.categoriesScreen.CategoriesViewModel
+import com.example.jewelleryapp.screen.categoriesScreen.CategoryScreenView
 import com.example.jewelleryapp.screen.homeScreen.HomeScreen
 import com.example.jewelleryapp.screen.homeScreen.HomeViewModel
 import com.example.jewelleryapp.screen.loginScreen.LoginScreen
@@ -29,6 +31,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var loginViewModel: LoginViewModel
     private lateinit var registerViewModel: RegisterViewModel
     private lateinit var homeViewModel: HomeViewModel
+    private lateinit var categoryViewModel: CategoriesViewModel
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,6 +55,7 @@ class MainActivity : ComponentActivity() {
         loginViewModel = LoginViewModel(authRepository)
         registerViewModel = RegisterViewModel(authRepository)
         homeViewModel = HomeViewModel(jewelryRepository)
+        categoryViewModel = CategoriesViewModel(jewelryRepository)
 
         enableEdgeToEdge()
         setContent {
@@ -58,7 +63,8 @@ class MainActivity : ComponentActivity() {
                 Surface(
                     modifier = Modifier.background(Color.White)
                 ) {
-                    AppNavigation(loginViewModel, registerViewModel, homeViewModel)
+                    //AppNavigation(loginViewModel, registerViewModel, homeViewModel)
+                    CategoryScreenView(categoryViewModel)
                 }
             }
         }
