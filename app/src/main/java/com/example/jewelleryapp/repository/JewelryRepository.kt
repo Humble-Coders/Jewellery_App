@@ -12,10 +12,236 @@ import kotlinx.coroutines.flow.flow
 import java.lang.Exception
 
 class JewelryRepository(
+    private val userId: String, // Add this parameter
     private val firestore: FirebaseFirestore,
     private val storageHelper: FirebaseStorageHelper
 ) {
     private val TAG = "JewelryRepository"
+
+    // Function to add test wishlist items if none exist
+    suspend fun addTestWishlistItemsIfEmpty() {
+        try {
+            Log.d(TAG, "Checking if wishlist is empty for user: $userId")
+            val snapshot = firestore.collection("users")
+                .document(userId)
+                .collection("wishlist")
+                .limit(1)  // Just check if there's at least one item
+                .get()
+                .await()
+
+            if (snapshot.isEmpty) {
+                Log.d(TAG, "Wishlist is empty, adding test items")
+
+                // Use specific product IDs for demo
+                val testItems = listOf(
+                    "product_8600b6bb",
+                    "product_aa2b2cca",
+                    "product_b3811b6b"
+                )
+                Log.d(TAG, "Using demo products: $testItems")
+
+                // Add each test item to the wishlist
+                for (productId in testItems) {
+                    try {
+                        addToWishlist(productId)
+                        Log.d(TAG, "Added test item $productId to wishlist")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to add test item $productId", e)
+                    }
+                }
+                Log.d(TAG, "Finished adding test items to wishlist")
+            } else {
+                Log.d(TAG, "Wishlist already has items, skipping test items")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking/adding test wishlist items", e)
+            throw e  // Re-throw to handle in the ViewModel
+        }
+    }
+
+    // Make sure the getWishlistItems method has proper logging and error handling
+    suspend fun getWishlistItems(): Flow<List<Product>> = flow {
+        try {
+            Log.d(TAG, "Fetching wishlist items for user: $userId")
+            val snapshot = firestore.collection("users")
+                .document(userId)
+                .collection("wishlist")
+                .get()
+                .await()
+
+            val productIds = snapshot.documents.map { it.id }
+            Log.d(TAG, "Found ${productIds.size} items in wishlist: $productIds")
+
+            if (productIds.isEmpty()) {
+                Log.d(TAG, "No items in wishlist")
+                emit(emptyList())
+                return@flow
+            }
+
+            val products = fetchProductsByIds(productIds)
+            Log.d(TAG, "Successfully fetched ${products.size} products for wishlist")
+
+            // Add more detailed logging for debug
+            products.forEach { product ->
+                Log.d(TAG, "Wishlist product: ${product.id}, ${product.name}, ${product.imageUrl}")
+            }
+
+            emit(products)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching wishlist items", e)
+            throw e  // Re-throw so it can be caught and handled in the ViewModel
+        }
+    }
+    suspend fun removeFromWishlist(productId: String) {
+        try {
+            firestore.collection("users")
+                .document(userId)
+                .collection("wishlist")
+                .document(productId)
+                .delete()
+                .await()
+            Log.d(TAG, "Successfully removed product $productId from wishlist")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error removing product from wishlist", e)
+            throw e
+        }
+    }
+
+    suspend fun addToWishlist(productId: String) {
+        try {
+            firestore.collection("users")
+                .document(userId)
+                .collection("wishlist")
+                .document(productId)
+                .set(mapOf(
+                    "addedAt" to System.currentTimeMillis(),
+                    "productId" to productId
+                ))
+                .await()
+            Log.d(TAG, "Successfully added product $productId to wishlist")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error adding product to wishlist", e)
+            throw e
+        }
+    }
+
+/*
+
+    suspend fun getWishlistItems(): Flow<List<Product>> = flow {
+        try {
+            Log.d(TAG, "Fetching wishlist items for user: $userId")
+            val snapshot = firestore.collection("users")
+                .document(userId)
+                .collection("wishlist")
+                .get()
+                .await()
+
+            val productIds = snapshot.documents.map { it.id }
+            Log.d(TAG, "Found ${productIds.size} items in wishlist: $productIds")
+
+            if (productIds.isEmpty()) {
+                Log.d(TAG, "No items in wishlist")
+                emit(emptyList())
+                return@flow
+            }
+
+            val products = fetchProductsByIds(productIds)
+            Log.d(TAG, "Successfully fetched ${products.size} products for wishlist")
+            emit(products)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching wishlist items for user: $userId", e)
+            emit(emptyList())
+        }
+    }
+*/
+    suspend fun getCategoryProducts(categoryId: String): Flow<List<Product>> = flow {
+        try {
+            // Get product IDs from category_products collection
+            val categoryDoc = firestore.collection("category_products")
+                .document("category_${categoryId.lowercase()}")
+                .get()
+                .await()
+
+            val productIds = (categoryDoc.get("product_ids") as? List<*>)?.map { it.toString() } ?: emptyList()
+
+            if (productIds.isEmpty()) {
+                emit(emptyList())
+                return@flow
+            }
+
+            val products = fetchProductsByIds(productIds)
+            emit(products)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching category products", e)
+            emit(emptyList())
+        }
+    }
+
+    private suspend fun fetchProductsByIds(productIds: List<String>): List<Product> {
+        val products = mutableListOf<Product>()
+
+        try {
+            Log.d(TAG, "Fetching products for IDs: $productIds")
+            // Fetch products in batches of 10 (Firestore limitation)
+            productIds.chunked(10).forEach { batch ->
+                Log.d(TAG, "Fetching batch of products: $batch")
+                // Get each product document directly by its ID
+                val batchProducts = batch.mapNotNull { productId ->
+                    try {
+                        val doc = firestore.collection("products").document(productId).get().await()
+                        if (!doc.exists()) {
+                            Log.e(TAG, "Product document $productId does not exist")
+                            null
+                        } else {
+                            doc
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error fetching product $productId", e)
+                        null
+                    }
+                }.map { doc ->
+                        // Get the image URL from the images array
+                        val images = doc.get("images") as? List<*>
+                        val imageUrl = when {
+                            images.isNullOrEmpty() -> ""
+                            images[0] is String -> images[0] as String
+                            else -> ""
+                        }
+                        Log.d(TAG, "Raw image URL for product ${doc.id}: $imageUrl")
+                        
+                        // Convert to HTTPS URL if it's a valid image path
+                        val httpsImageUrl = if (imageUrl.isNotEmpty()) {
+                            storageHelper.getDownloadUrl(imageUrl)
+                        } else {
+                            ""
+                        }
+                        Log.d(TAG, "Converted image URL for product ${doc.id}: $httpsImageUrl")
+
+                        Log.d(TAG, "Processing product: ${doc.id}, name: ${doc.getString("name")}, type: ${doc.getString("type")}")
+
+                        Product(
+                            id = doc.id,
+                            name = doc.getString("name") ?: "",
+                            price = doc.getDouble("price") ?: 0.0,
+                            currency = "Rs",
+                            imageUrl = httpsImageUrl,
+                            isFavorite = true,
+                            category = doc.getString("type") ?: ""
+                        )
+                    }
+                products.addAll(batchProducts)
+                Log.d(TAG, "Added ${batchProducts.size} products from batch")
+            }
+            Log.d(TAG, "Successfully fetched ${products.size} products")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching products by IDs: $productIds", e)
+            throw e  // Re-throw to handle in ViewModel
+        }
+
+        return products
+    }
+
+
 
     suspend fun getCategories(): Flow<List<Category>> = flow {
         try {
@@ -86,7 +312,7 @@ class JewelryRepository(
                         id = doc.getString("id") ?: doc.id,
                         name = doc.getString("name") ?: "",
                         price = doc.getDouble("price") ?: 0.0,
-                        currency = "USD", // Assuming USD as default
+                        currency = "Rs", // Using Rs as default currency
                         imageUrl = httpsImageUrl,
                         isFavorite = false // You'd need to implement user-specific wishlist logic here
                     )

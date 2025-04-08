@@ -14,7 +14,8 @@ data class Product(
     val price: Double,
     val currency: String = "Rs",
     val imageUrl: String,
-    val isFavorite: Boolean = false
+    val isFavorite: Boolean = false,
+    val category: String = ""
 )
 
 data class Collection(
