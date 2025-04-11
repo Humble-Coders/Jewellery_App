@@ -44,7 +44,7 @@ class WishlistViewModel(private val repository: JewelryRepository) : ViewModel()
 
                 // First add test items if wishlist is empty
                 try {
-                    repository.addTestWishlistItemsIfEmpty()
+                    //repository.addTestWishlistItemsIfEmpty()
                     Log.d("WishlistViewModel", "Test items added successfully if needed")
                 } catch (e: Exception) {
                     Log.e("WishlistViewModel", "Failed to add test items", e)

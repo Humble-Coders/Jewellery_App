@@ -73,6 +73,7 @@ class ItemDetailViewModel(
                 val currentProduct = _product.value ?: return@launch
                 val currentWishlistStatus = _isInWishlist.value
 
+                // Toggle loading state
                 _isLoading.value = true
 
                 if (currentWishlistStatus) {
@@ -82,11 +83,13 @@ class ItemDetailViewModel(
                     Log.d(TAG, "Successfully removed product ${currentProduct.id} from wishlist")
                 } else {
                     // If not in wishlist, add it
-                    // If not in wishlist, add it
                     repository.addToWishlist(currentProduct.id)
                     _isInWishlist.value = true
                     Log.d(TAG, "Successfully added product ${currentProduct.id} to wishlist")
                 }
+
+                // Update similar products if the toggled product is there
+                updateSimilarProductWishlistStatus(currentProduct.id, !currentWishlistStatus)
             } catch (e: Exception) {
                 Log.e(TAG, "Error toggling wishlist", e)
                 _error.value = e.message ?: "An error occurred while updating wishlist"
@@ -95,6 +98,7 @@ class ItemDetailViewModel(
             }
         }
     }
+
     // Add this method to ItemDetailViewModel.kt
     fun toggleSimilarProductWishlist(productId: String) {
         viewModelScope.launch {
@@ -108,22 +112,23 @@ class ItemDetailViewModel(
 
                     if (currentWishlistStatus) {
                         // If currently in wishlist, remove it
-                            // Update similar products list with new wishlist status
-                            _similarProducts.value = _similarProducts.value.map {
-                                if (it.id == productId) it.copy(isFavorite = false) else it
-                            }
-                            Log.d(TAG, "Successfully removed similar product $productId from wishlist")
+                        repository.removeFromWishlist(productId)
 
+                        // Update similar products list with new wishlist status
+                        updateSimilarProductWishlistStatus(productId, false)
+                        Log.d(TAG, "Successfully removed similar product $productId from wishlist")
                     } else {
                         // If not in wishlist, add it
-                        val result = repository.addToWishlist(productId)
+                        repository.addToWishlist(productId)
 
-                            // Update similar products list with new wishlist status
-                            _similarProducts.value = _similarProducts.value.map {
-                                if (it.id == productId) it.copy(isFavorite = true) else it
-                            }
-                            Log.d(TAG, "Successfully added similar product $productId to wishlist")
+                        // Update similar products list with new wishlist status
+                        updateSimilarProductWishlistStatus(productId, true)
+                        Log.d(TAG, "Successfully added similar product $productId to wishlist")
+                    }
 
+                    // If the toggled product is the current product, update its status too
+                    if (productId == _product.value?.id) {
+                        _isInWishlist.value = !currentWishlistStatus
                     }
                 } else {
                     Log.e(TAG, "Similar product $productId not found in similar products list")
@@ -134,6 +139,12 @@ class ItemDetailViewModel(
             } finally {
                 _isLoading.value = false
             }
+        }
+    }
+
+    private fun updateSimilarProductWishlistStatus(productId: String, isFavorite: Boolean) {
+        _similarProducts.value = _similarProducts.value.map {
+            if (it.id == productId) it.copy(isFavorite = isFavorite) else it
         }
     }
 

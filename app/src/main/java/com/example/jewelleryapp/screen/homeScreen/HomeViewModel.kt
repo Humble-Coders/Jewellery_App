@@ -57,17 +57,8 @@ class HomeViewModel(private val repository: JewelryRepository) : ViewModel() {
 
                 // Load featured products
                 repository.getFeaturedProducts().collect { products ->
-                    // Check wishlist status for each product
-                    val productsWithWishlistStatus = products.map { product ->
-                        try {
-                            val isInWishlist = repository.isInWishlist(product.id)
-                            product.copy(isFavorite = isInWishlist)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Error checking wishlist status for product ${product.id}", e)
-                            product
-                        }
-                    }
-                    _featuredProducts.value = productsWithWishlistStatus
+                    // Update wishlist status for all products
+                    updateProductsWithWishlistStatus(products)
                 }
 
                 // Load themed collections
@@ -105,6 +96,25 @@ class HomeViewModel(private val repository: JewelryRepository) : ViewModel() {
         }
     }
 
+    // New function to update all products with current wishlist status
+    private suspend fun updateProductsWithWishlistStatus(products: List<Product>) {
+        try {
+            val productsWithWishlistStatus = products.map { product ->
+                try {
+                    val isInWishlist = repository.isInWishlist(product.id)
+                    product.copy(isFavorite = isInWishlist)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error checking wishlist status for product ${product.id}", e)
+                    product
+                }
+            }
+            _featuredProducts.value = productsWithWishlistStatus
+            Log.d(TAG, "Updated wishlist status for ${products.size} products")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating wishlist status for products", e)
+        }
+    }
+
     // Check if a product is in wishlist
     fun checkWishlistStatus(productId: String) {
         viewModelScope.launch {
@@ -128,6 +138,8 @@ class HomeViewModel(private val repository: JewelryRepository) : ViewModel() {
                         product
                     }
                 }
+
+                Log.d(TAG, "Product $productId wishlist status: $isInWishlist")
             } catch (e: Exception) {
                 Log.e(TAG, "Error checking wishlist status for product $productId", e)
             }

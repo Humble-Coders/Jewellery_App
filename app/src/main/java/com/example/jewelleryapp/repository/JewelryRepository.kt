@@ -21,44 +21,40 @@ class JewelryRepository(
 ) {
     private val TAG = "JewelryRepository"
 
+    // Cache for wishlist status to avoid excessive Firestore calls
+    private val wishlistCache = mutableMapOf<String, Boolean>()
+
     // Function to add test wishlist items if none exist
-    suspend fun addTestWishlistItemsIfEmpty() {
+
+    // Function to update wishlist cache from Firestore
+    suspend fun refreshWishlistCache() {
         try {
-            Log.d(TAG, "Checking if wishlist is empty for user: $userId")
+            Log.d(TAG, "Refreshing wishlist cache for user: $userId")
+            if (userId.isBlank()) {
+                Log.d(TAG, "User ID is blank, cannot refresh wishlist cache")
+                wishlistCache.clear()
+                return
+            }
+
+            // Clear existing cache
+            wishlistCache.clear()
+
+            // Get all wishlist items
             val snapshot = firestore.collection("users")
                 .document(userId)
                 .collection("wishlist")
-                .limit(1)  // Just check if there's at least one item
                 .get()
                 .await()
 
-            if (snapshot.isEmpty) {
-                Log.d(TAG, "Wishlist is empty, adding test items")
-
-                // Use specific product IDs for demo
-                val testItems = listOf(
-                    "product_8600b6bb",
-                    "product_aa2b2cca",
-                    "product_b3811b6b"
-                )
-                Log.d(TAG, "Using demo products: $testItems")
-
-                // Add each test item to the wishlist
-                for (productId in testItems) {
-                    try {
-                        addToWishlist(productId)
-                        Log.d(TAG, "Added test item $productId to wishlist")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to add test item $productId", e)
-                    }
-                }
-                Log.d(TAG, "Finished adding test items to wishlist")
-            } else {
-                Log.d(TAG, "Wishlist already has items, skipping test items")
+            // Update cache with all items
+            snapshot.documents.forEach { doc ->
+                wishlistCache[doc.id] = true
             }
+
+            Log.d(TAG, "Refreshed wishlist cache with ${wishlistCache.size} items")
         } catch (e: Exception) {
-            Log.e(TAG, "Error checking/adding test wishlist items", e)
-            throw e  // Re-throw to handle in the ViewModel
+            Log.e(TAG, "Error refreshing wishlist cache", e)
+            // Don't clear cache on error to prevent data loss
         }
     }
 
@@ -66,6 +62,10 @@ class JewelryRepository(
     suspend fun getWishlistItems(): Flow<List<Product>> = flow {
         try {
             Log.d(TAG, "Fetching wishlist items for user: $userId")
+
+            // Refresh the cache first
+            refreshWishlistCache()
+
             val snapshot = firestore.collection("users")
                 .document(userId)
                 .collection("wishlist")
@@ -89,20 +89,31 @@ class JewelryRepository(
                 Log.d(TAG, "Wishlist product: ${product.id}, ${product.name}, ${product.imageUrl}")
             }
 
-            emit(products)
+            // Mark all products as favorites since they're in the wishlist
+            val productsWithFavoriteFlag = products.map { it.copy(isFavorite = true) }
+            emit(productsWithFavoriteFlag)
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching wishlist items", e)
             throw e  // Re-throw so it can be caught and handled in the ViewModel
         }
     }
+
     suspend fun removeFromWishlist(productId: String) {
         try {
+            if (userId.isBlank()) {
+                Log.e(TAG, "Cannot remove from wishlist: User ID is blank")
+                return
+            }
+
             firestore.collection("users")
                 .document(userId)
                 .collection("wishlist")
                 .document(productId)
                 .delete()
                 .await()
+
+            // Update cache
+            wishlistCache[productId] = false
             Log.d(TAG, "Successfully removed product $productId from wishlist")
         } catch (e: Exception) {
             Log.e(TAG, "Error removing product from wishlist", e)
@@ -112,6 +123,11 @@ class JewelryRepository(
 
     suspend fun addToWishlist(productId: String) {
         try {
+            if (userId.isBlank()) {
+                Log.e(TAG, "Cannot add to wishlist: User ID is blank")
+                return
+            }
+
             firestore.collection("users")
                 .document(userId)
                 .collection("wishlist")
@@ -121,6 +137,9 @@ class JewelryRepository(
                     "productId" to productId
                 ))
                 .await()
+
+            // Update cache
+            wishlistCache[productId] = true
             Log.d(TAG, "Successfully added product $productId to wishlist")
         } catch (e: Exception) {
             Log.e(TAG, "Error adding product to wishlist", e)
@@ -128,35 +147,6 @@ class JewelryRepository(
         }
     }
 
-/*
-
-    suspend fun getWishlistItems(): Flow<List<Product>> = flow {
-        try {
-            Log.d(TAG, "Fetching wishlist items for user: $userId")
-            val snapshot = firestore.collection("users")
-                .document(userId)
-                .collection("wishlist")
-                .get()
-                .await()
-
-            val productIds = snapshot.documents.map { it.id }
-            Log.d(TAG, "Found ${productIds.size} items in wishlist: $productIds")
-
-            if (productIds.isEmpty()) {
-                Log.d(TAG, "No items in wishlist")
-                emit(emptyList())
-                return@flow
-            }
-
-            val products = fetchProductsByIds(productIds)
-            Log.d(TAG, "Successfully fetched ${products.size} products for wishlist")
-            emit(products)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error fetching wishlist items for user: $userId", e)
-            emit(emptyList())
-        }
-    }
-*/
     suspend fun getCategoryProducts(categoryId: String): Flow<List<Product>> = flow {
         try {
             // Get product IDs from category_products collection
@@ -203,35 +193,38 @@ class JewelryRepository(
                         null
                     }
                 }.map { doc ->
-                        // Get the image URL from the images array
-                        val images = doc.get("images") as? List<*>
-                        val imageUrl = when {
-                            images.isNullOrEmpty() -> ""
-                            images[0] is String -> images[0] as String
-                            else -> ""
-                        }
-                        Log.d(TAG, "Raw image URL for product ${doc.id}: $imageUrl")
-                        
-                        // Convert to HTTPS URL if it's a valid image path
-                        val httpsImageUrl = if (imageUrl.isNotEmpty()) {
-                            storageHelper.getDownloadUrl(imageUrl)
-                        } else {
-                            ""
-                        }
-                        Log.d(TAG, "Converted image URL for product ${doc.id}: $httpsImageUrl")
-
-                        Log.d(TAG, "Processing product: ${doc.id}, name: ${doc.getString("name")}, type: ${doc.getString("type")}")
-
-                        Product(
-                            id = doc.id,
-                            name = doc.getString("name") ?: "",
-                            price = doc.getDouble("price") ?: 0.0,
-                            currency = "Rs",
-                            imageUrl = httpsImageUrl,
-                            isFavorite = true,
-                            category = doc.getString("type") ?: ""
-                        )
+                    // Get the image URL from the images array
+                    val images = doc.get("images") as? List<*>
+                    val imageUrl = when {
+                        images.isNullOrEmpty() -> ""
+                        images[0] is String -> images[0] as String
+                        else -> ""
                     }
+                    Log.d(TAG, "Raw image URL for product ${doc.id}: $imageUrl")
+
+                    // Convert to HTTPS URL if it's a valid image path
+                    val httpsImageUrl = if (imageUrl.isNotEmpty()) {
+                        storageHelper.getDownloadUrl(imageUrl)
+                    } else {
+                        ""
+                    }
+                    Log.d(TAG, "Converted image URL for product ${doc.id}: $httpsImageUrl")
+
+                    Log.d(TAG, "Processing product: ${doc.id}, name: ${doc.getString("name")}, type: ${doc.getString("type")}")
+
+                    // Check wishlist status from cache
+                    val isFavorite = wishlistCache[doc.id] == true
+
+                    Product(
+                        id = doc.id,
+                        name = doc.getString("name") ?: "",
+                        price = doc.getDouble("price") ?: 0.0,
+                        currency = "Rs",
+                        imageUrl = httpsImageUrl,
+                        isFavorite = isFavorite,
+                        category = doc.getString("type") ?: ""
+                    )
+                }
                 products.addAll(batchProducts)
                 Log.d(TAG, "Added ${batchProducts.size} products from batch")
             }
@@ -243,8 +236,6 @@ class JewelryRepository(
 
         return products
     }
-
-
 
     suspend fun getCategories(): Flow<List<Category>> = flow {
         try {
@@ -273,6 +264,9 @@ class JewelryRepository(
 
     suspend fun getFeaturedProducts(): Flow<List<Product>> = flow {
         try {
+            // Make sure the wishlist cache is up to date
+            refreshWishlistCache()
+
             // First get the list of featured product IDs
             val featuredListDoc = firestore.collection("featured_products")
                 .document("featured_list")
@@ -311,13 +305,17 @@ class JewelryRepository(
 
                     Log.d(TAG, "Product ${doc.getString("name")}: Converting $gsImageUrl to $httpsImageUrl")
 
+                    // Check wishlist status from cache
+                    val productId = doc.getString("id") ?: doc.id
+                    val isFavorite = wishlistCache[productId] == true
+
                     Product(
-                        id = doc.getString("id") ?: doc.id,
+                        id = productId,
                         name = doc.getString("name") ?: "",
                         price = doc.getDouble("price") ?: 0.0,
                         currency = "Rs", // Using Rs as default currency
                         imageUrl = httpsImageUrl,
-                        isFavorite = false // You'd need to implement user-specific wishlist logic here
+                        isFavorite = isFavorite
                     )
                 }
                 products.addAll(batchProducts)
@@ -408,96 +406,48 @@ class JewelryRepository(
     }
 
     // Function to check if a product is in the user's wishlist
-    suspend fun isProductInWishlist(userId: String, productId: String): Boolean {
-        return try {
-            val wishlistDoc = firestore.collection("wishlists")
-                .whereEqualTo("user_id", userId)
-                .get()
-                .await()
-
-            if (wishlistDoc.documents.isEmpty()) return false
-
-            val wishlistId = wishlistDoc.documents[0].id
-            val productIds = wishlistDoc.documents[0].get("product_ids") as? List<String> ?: emptyList()
-
-            productIds.contains(productId)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error checking wishlist status", e)
-            false
-        }
-    }
-
-    // Function to add a product to the user's wishlist
-    suspend fun addToWishlist(userId: String, productId: String): Boolean {
-        return try {
-            // First check if user has a wishlist
-            val wishlistQuery = firestore.collection("wishlists")
-                .whereEqualTo("user_id", userId)
-                .get()
-                .await()
-
-            if (wishlistQuery.documents.isEmpty()) {
-                // Create new wishlist
-                firestore.collection("wishlists")
-                    .add(mapOf(
-                        "user_id" to userId,
-                        "product_ids" to listOf(productId),
-                        "created_at" to com.google.firebase.Timestamp.now()
-                    ))
-                    .await()
-            } else {
-                // Update existing wishlist
-                val wishlistDoc = wishlistQuery.documents[0]
-                val productIds = wishlistDoc.get("product_ids") as? List<String> ?: emptyList()
-
-                if (!productIds.contains(productId)) {
-                    firestore.collection("wishlists")
-                        .document(wishlistDoc.id)
-                        .update("product_ids", productIds + productId)
-                        .await()
-                }
+    suspend fun isInWishlist(productId: String): Boolean {
+        try {
+            // Check the cache first if it exists
+            if (wishlistCache.containsKey(productId)) {
+                val cachedStatus = wishlistCache[productId] == true
+                Log.d(TAG, "Found product $productId in wishlist cache: $cachedStatus")
+                return cachedStatus
             }
 
-            Log.d(TAG, "Added product $productId to wishlist for user $userId")
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Error adding to wishlist", e)
-            false
-        }
-    }
+            // If not in cache, check from Firestore
+            if (userId.isBlank()) {
+                Log.d(TAG, "User ID is blank, cannot check wishlist status")
+                return false
+            }
 
-    // Function to remove a product from the user's wishlist
-    suspend fun removeFromWishlist(userId: String, productId: String): Boolean {
-        return try {
-            val wishlistQuery = firestore.collection("wishlists")
-                .whereEqualTo("user_id", userId)
+            val doc = firestore.collection("users")
+                .document(userId)
+                .collection("wishlist")
+                .document(productId)
                 .get()
                 .await()
 
-            if (wishlistQuery.documents.isEmpty()) return false
+            val exists = doc.exists()
 
-            val wishlistDoc = wishlistQuery.documents[0]
-            val productIds = wishlistDoc.get("product_ids") as? List<String> ?: return false
+            // Update the cache
+            wishlistCache[productId] = exists
 
-            if (productIds.contains(productId)) {
-                firestore.collection("wishlists")
-                    .document(wishlistDoc.id)
-                    .update("product_ids", productIds - productId)
-                    .await()
-
-                Log.d(TAG, "Removed product $productId from wishlist for user $userId")
-                return true
-            }
-
-            false
+            Log.d(TAG, "Checked Firestore for product $productId in wishlist: $exists")
+            return exists
         } catch (e: Exception) {
-            Log.e(TAG, "Error removing from wishlist", e)
-            false
+            Log.e(TAG, "Error checking if product is in wishlist", e)
+            return false
         }
     }
 
     suspend fun getProductDetails(productId: String): Flow<Product> = flow {
         try {
+            // Make sure wishlist cache is up to date
+            if (wishlistCache.isEmpty()) {
+                refreshWishlistCache()
+            }
+
             val documentSnapshot = firestore.collection("products")
                 .document(productId)
                 .get()
@@ -509,6 +459,9 @@ class JewelryRepository(
                 val firstImageUrl = imageUrls?.firstOrNull()?.toString() ?: ""
                 val httpsImageUrl = storageHelper.getDownloadUrl(firstImageUrl)
 
+                // Check wishlist status
+                val isInWishlist = wishlistCache[productId] == true
+
                 val product = Product(
                     id = documentSnapshot.id,
                     name = documentSnapshot.getString("name") ?: "",
@@ -516,13 +469,13 @@ class JewelryRepository(
                     currency = documentSnapshot.getString("currency") ?: "Rs",
                     category_id = documentSnapshot.getString("category_id") ?: "",
                     imageUrl = httpsImageUrl,
-                    material_id = documentSnapshot.getString("material_id") ?: "",
-                    material_type = documentSnapshot.getString("material_type") ?: "",
+                    material_id = documentSnapshot.getString("material_id"),
+                    material_type = documentSnapshot.getString("material_type"),
                     stone = documentSnapshot.getString("stone") ?: "",
                     clarity = documentSnapshot.getString("clarity") ?: "",
                     cut = documentSnapshot.getString("cut") ?: "",
                     description = documentSnapshot.getString("description") ?: "",
-                    isFavorite = false // This will be updated later with user-specific data
+                    isFavorite = isInWishlist
                 )
                 emit(product)
             } else {
@@ -536,6 +489,9 @@ class JewelryRepository(
 
     suspend fun getProductsByCategory(categoryId: String, excludeProductId: String? = null): Flow<List<Product>> = flow {
         try {
+            // Refresh wishlist cache first
+            refreshWishlistCache()
+
             // Step 1: Get product IDs from category_products
             val categorySnapshot = firestore.collection("category_products")
                 .document(categoryId)
@@ -558,6 +514,9 @@ class JewelryRepository(
                         val firstImageUrl = imageUrls?.firstOrNull()?.toString() ?: ""
                         val httpsImageUrl = storageHelper.getDownloadUrl(firstImageUrl)
 
+                        // Check wishlist status from cache
+                        val isInWishlist = wishlistCache[doc.id] == true
+
                         Product(
                             id = doc.id,
                             name = doc.getString("name") ?: "",
@@ -569,7 +528,7 @@ class JewelryRepository(
                             stone = doc.getString("stone") ?: "",
                             clarity = doc.getString("clarity") ?: "",
                             cut = doc.getString("cut") ?: "",
-                            isFavorite = false
+                            isFavorite = isInWishlist
                         )
                     }
 
@@ -582,40 +541,4 @@ class JewelryRepository(
             Log.e(TAG, "Error fetching products by category", e)
             emit(emptyList())
         }
-    }
-
-
-    // Function to toggle wishlist status
-    suspend fun toggleWishlist(productId: String, userId: String) {
-        try {
-            val wishlistRef = firestore.collection("users")
-                .document(userId)
-                .collection("wishlist")
-                .document(productId)
-
-            val doc = wishlistRef.get().await()
-            if (doc.exists()) {
-                wishlistRef.delete().await()
-            } else {
-                wishlistRef.set(mapOf(
-                    "timestamp" to com.google.firebase.Timestamp.now()
-                )).await()
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error toggling wishlist", e)
-            throw e
-        }
-    }
-
-    // Function to check if a product is in wishlist
-    suspend fun isInWishlist(productId: String): Boolean {
-        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return false
-        return isProductInWishlist(userId, productId)
-    }
-
-    // Function to add a product to wishlist
-
-
-    // Function to remove a product from wishlist
-
-}
+    }}
