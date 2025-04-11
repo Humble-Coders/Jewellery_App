@@ -1,5 +1,6 @@
 package com.example.jewelleryapp.screen.homeScreen
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.jewelleryapp.model.CarouselItem
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class HomeViewModel(private val repository: JewelryRepository) : ViewModel() {
+    private val TAG = "HomeViewModel"
 
     // StateFlows to hold data for UI
     private val _categories = MutableStateFlow<List<Category>>(emptyList())
@@ -55,7 +57,17 @@ class HomeViewModel(private val repository: JewelryRepository) : ViewModel() {
 
                 // Load featured products
                 repository.getFeaturedProducts().collect { products ->
-                    _featuredProducts.value = products
+                    // Check wishlist status for each product
+                    val productsWithWishlistStatus = products.map { product ->
+                        try {
+                            val isInWishlist = repository.isInWishlist(product.id)
+                            product.copy(isFavorite = isInWishlist)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error checking wishlist status for product ${product.id}", e)
+                            product
+                        }
+                    }
+                    _featuredProducts.value = productsWithWishlistStatus
                 }
 
                 // Load themed collections
@@ -68,11 +80,9 @@ class HomeViewModel(private val repository: JewelryRepository) : ViewModel() {
                     _carouselItems.value = items
                 }
 
-                // Removing recently viewed products loading as requested
-                // We'll use collections instead
-
                 _isLoading.value = false
             } catch (e: Exception) {
+                Log.e(TAG, "Failed to load data", e)
                 _error.value = "Failed to load data: ${e.message}"
                 _isLoading.value = false
             }
@@ -90,17 +100,75 @@ class HomeViewModel(private val repository: JewelryRepository) : ViewModel() {
             try {
                 repository.recordProductView(userId, productId)
             } catch (e: Exception) {
-                // Handle error
+                Log.e(TAG, "Error recording product view", e)
             }
         }
     }
 
-    // Toggle favorite status
+    // Check if a product is in wishlist
+    fun checkWishlistStatus(productId: String) {
+        viewModelScope.launch {
+            try {
+                val isInWishlist = repository.isInWishlist(productId)
+
+                // Update the featured products list with the current wishlist status
+                _featuredProducts.value = _featuredProducts.value.map { product ->
+                    if (product.id == productId) {
+                        product.copy(isFavorite = isInWishlist)
+                    } else {
+                        product
+                    }
+                }
+
+                // Also update recently viewed products if needed
+                _recentlyViewedProducts.value = _recentlyViewedProducts.value.map { product ->
+                    if (product.id == productId) {
+                        product.copy(isFavorite = isInWishlist)
+                    } else {
+                        product
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking wishlist status for product $productId", e)
+            }
+        }
+    }
+
+    // Toggle favorite status and update in repository
     fun toggleFavorite(productId: String) {
+        viewModelScope.launch {
+            try {
+                // Get current favorite status from our list
+                val currentProduct = _featuredProducts.value.find { it.id == productId }
+                    ?: _recentlyViewedProducts.value.find { it.id == productId }
+
+                if (currentProduct != null) {
+                    val isCurrentlyFavorite = currentProduct.isFavorite
+
+                    // Toggle in repository
+                    if (isCurrentlyFavorite) {
+                        repository.removeFromWishlist(productId)
+                    } else {
+                        repository.addToWishlist(productId)
+                    }
+
+                    // Update UI state
+                    updateProductFavoriteStatus(productId, !isCurrentlyFavorite)
+
+                    Log.d(TAG, "Toggled favorite for product $productId to ${!isCurrentlyFavorite}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error toggling favorite for product $productId", e)
+            }
+        }
+    }
+
+    // Helper function to update favorite status in state
+    private fun updateProductFavoriteStatus(productId: String, isFavorite: Boolean) {
         // Update featured products
         _featuredProducts.value = _featuredProducts.value.map { product ->
             if (product.id == productId) {
-                product.copy(isFavorite = !product.isFavorite)
+                product.copy(isFavorite = isFavorite)
             } else {
                 product
             }
@@ -109,12 +177,10 @@ class HomeViewModel(private val repository: JewelryRepository) : ViewModel() {
         // Update recently viewed products
         _recentlyViewedProducts.value = _recentlyViewedProducts.value.map { product ->
             if (product.id == productId) {
-                product.copy(isFavorite = !product.isFavorite)
+                product.copy(isFavorite = isFavorite)
             } else {
                 product
             }
         }
-
-        // In a real app, you would also update this in Firebase
     }
 }

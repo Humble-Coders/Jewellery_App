@@ -614,14 +614,8 @@ class JewelryRepository(
     }
 
     // Function to add a product to wishlist
-    suspend fun addToWishlist(productId: String): Boolean {
-        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return false
-        return addToWishlist(userId, productId)
-    }
+
 
     // Function to remove a product from wishlist
-    suspend fun removeFromWishlist(productId: String): Boolean {
-        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return false
-        return removeFromWishlist(userId, productId)
-    }
+
 }

@@ -15,7 +15,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
@@ -31,7 +33,8 @@ import com.example.jewelleryapp.model.Category
 
 // CategoriesScreen.kt
 @Composable
-fun CategoryScreenView(viewModel: CategoriesViewModel) {
+fun CategoryScreenView(viewModel: CategoriesViewModel,
+                       navController: NavController) {
     val categories by viewModel.categories.collectAsState()
     val collections by viewModel.collections.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -39,10 +42,14 @@ fun CategoryScreenView(viewModel: CategoriesViewModel) {
     Scaffold(
         topBar = {
             Box(modifier = Modifier.statusBarsPadding()) {
-                TopAppbar("Categories")
+                TopAppbar(
+                    title = "Categories",
+                    onMenuClick = { /* Handle menu click */ },
+                    onBackClick = { navController.popBackStack() }
+                )
             }
         },
-        bottomBar = { BottomNavigationBar() }
+        bottomBar = { BottomNavigationBar(navController) }
     ) { paddingValues ->
         Box(
             modifier = Modifier
@@ -133,17 +140,42 @@ fun CategoryCardView(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)))
+
+            // Semi-transparent overlay for better text visibility
+            Box(modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.3f)))
+
             Column(
-                modifier = Modifier.align(Alignment.BottomStart).padding(12.dp)
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(12.dp)
             ) {
                 Text(
                     text = title,
-                    style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    style = TextStyle(
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        shadow = Shadow(
+                            color = Color.Black.copy(alpha = 0.7f),
+                            offset = Offset(1f, 1f),
+                            blurRadius = 2f
+                        )
+                    )
                 )
+
                 Text(
                     text = itemCount,
-                    style = TextStyle(fontSize = 12.sp, color = Color.White.copy(alpha = 0.8f))
+                    style = TextStyle(
+                        fontSize = 12.sp,
+                        color = Color.White.copy(alpha = 0.8f),
+                        shadow = Shadow(
+                            color = Color.Black.copy(alpha = 0.5f),
+                            offset = Offset(1f, 1f),
+                            blurRadius = 1f
+                        )
+                    )
                 )
             }
         }

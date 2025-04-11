@@ -10,10 +10,13 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -21,19 +24,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.jewelleryapp.model.Product
-import com.example.jewelleryapp.screen.homeScreen.TopAppbar
 import com.example.jewelleryapp.screen.homeScreen.BottomNavigationBar
 
+// Main Wishlist Screen
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WishlistScreen(
-    viewModel: WishlistViewModel
+    viewModel: WishlistViewModel,
+    navController: NavController
 ) {
     val wishlistItems by viewModel.wishlistItems.collectAsState()
     val selectedCategory by viewModel.selectedCategory.collectAsState()
@@ -44,13 +52,30 @@ fun WishlistScreen(
     // Define the gold accent color to match
     val GoldColor = Color(0xFFD4A968)
 
+    // Force refresh wishlist items when screen enters composition
+    LaunchedEffect(Unit) {
+        viewModel.refreshWishlistItems()
+    }
+
     Scaffold(
         topBar = {
-            TopAppbar(
-                title = "Wishlist"
+            TopAppBar(
+                title = { Text("Wishlist", color = GoldColor) },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Default.ArrowBack,
+                            contentDescription = "Back",
+                            tint = GoldColor
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.White
+                )
             )
         },
-        bottomBar = { BottomNavigationBar() },
+        bottomBar = { BottomNavigationBar(navController) },
         containerColor = Color.White
     ) { padding ->
         Column(
@@ -67,6 +92,7 @@ fun WishlistScreen(
                 },
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
             )
+
             if (isLoading) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -79,38 +105,24 @@ fun WishlistScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = error ?: "An error occurred",
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-            } else if (wishlistItems.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "Your wishlist is empty",
-                            style = TextStyle(
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color.Gray
-                            )
+                            text = error ?: "An error occurred",
+                            color = MaterialTheme.colorScheme.error
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Add items to your wishlist to see them here",
-                            style = TextStyle(
-                                fontSize = 14.sp,
-                                color = Color.Gray
-                            ),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 32.dp)
-                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = { viewModel.refreshWishlistItems() },
+                            colors = ButtonDefaults.buttonColors(containerColor = GoldColor)
+                        ) {
+                            Text("Try Again")
+                        }
                     }
                 }
+            } else if (wishlistItems.isEmpty()) {
+                EmptyWishlistView()
             } else {
+                // Items grid
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
                     contentPadding = PaddingValues(16.dp),
@@ -121,11 +133,45 @@ fun WishlistScreen(
                     items(wishlistItems) { product ->
                         WishlistItemCard(
                             product = product,
-                            onRemoveClick = { viewModel.removeFromWishlist(product.id) }
+                            onProductClick = {
+                                navController.navigate("itemDetail/${product.id}")
+                            },
+                            onRemoveClick = {
+                                viewModel.removeFromWishlist(product.id)
+                            }
                         )
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun EmptyWishlistView() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "Your wishlist is empty",
+                style = TextStyle(
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.Gray
+                )
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Add items to your wishlist to see them here",
+                style = TextStyle(
+                    fontSize = 14.sp,
+                    color = Color.Gray
+                ),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 32.dp)
+            )
         }
     }
 }
@@ -155,7 +201,7 @@ fun CategoryButton(
 }
 
 /**
- * Custom Category Bar Component
+ * Category Bar Component
  */
 @Composable
 fun CategoryBar(
@@ -185,12 +231,16 @@ fun CategoryBar(
 @Composable
 fun WishlistItemCard(
     product: Product,
+    onProductClick: () -> Unit,
     onRemoveClick: () -> Unit
 ) {
+    val context = LocalContext.current
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(240.dp), // Reduced height for better proportions
+            .height(240.dp) // Fixed height for better grid alignment
+            .clickable(onClick = onProductClick),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -201,27 +251,29 @@ fun WishlistItemCard(
                     .fillMaxWidth()
                     .height(120.dp)
             ) {
+                // Background placeholder
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                        .fillMaxSize()
                         .background(Color(0xFFF5F5F5))
-                ) {
-                    AsyncImage(
-                        model = if (product.imageUrl.isEmpty()) {
-                            "https://firebasestorage.googleapis.com/v0/b/jewellery-app-6a2b9.appspot.com/o/product_images%2Fdefault.jpg?alt=media"
-                        } else product.imageUrl,
-                        contentDescription = product.name,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                        alignment = Alignment.Center
-                    )
-                }
+                )
+
+                // Actual image
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(product.imageUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = product.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                // Favorite icon
                 Icon(
                     imageVector = Icons.Default.Favorite,
                     contentDescription = "Favorite",
-                    tint = Color(0xFFD4A968), // Gold color matching the image
+                    tint = Color(0xFFD4A968), // Gold color
                     modifier = Modifier
                         .padding(8.dp)
                         .align(Alignment.TopEnd)
@@ -257,8 +309,7 @@ fun WishlistItemCard(
                 Spacer(modifier = Modifier.height(4.dp))
                 OutlinedButton(
                     onClick = onRemoveClick,
-                    modifier = Modifier
-                        .fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
                         containerColor = Color.White,
@@ -279,117 +330,4 @@ fun WishlistItemCard(
             }
         }
     }
-}
-
-@Composable
-fun CartItemCard(
-    product: Product,
-    onRemoveClick: () -> Unit,
-    onFavoriteClick: () -> Unit,
-    isFavorite: Boolean
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(240.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Column {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
-                        .background(Color(0xFFF5F5F5))
-                ) {
-                    AsyncImage(
-                        model = if (product.imageUrl.isEmpty()) {
-                            "https://firebasestorage.googleapis.com/v0/b/jewellery-app-6a2b9.appspot.com/o/product_images%2Fdefault.jpg?alt=media"
-                        } else product.imageUrl,
-                        contentDescription = product.name,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                        alignment = Alignment.Center
-                    )
-                }
-
-                // Favorite icon button in the top right
-                IconButton(
-                    onClick = onFavoriteClick,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .size(32.dp)
-                ) {
-                    Icon(
-                        imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                        contentDescription = "Favorite",
-                        tint = if (isFavorite) Color(0xFFD4A968) else Color.Gray,
-                    )
-                }
-            }
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp)
-            ) {
-                Text(
-                    text = product.name,
-                    style = TextStyle(
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color.Black
-                    ),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.height(40.dp) // Fixed height for name
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = "${product.currency} ${formatPrice(product.price)}",
-                    style = TextStyle(
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    ),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Button(
-                    onClick = onRemoveClick,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFF5F5F5),  // Light gray background
-                        contentColor = Color.Black
-                    )
-                ) {
-                    Text(
-                        "Remove",
-                        style = TextStyle(
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 14.sp
-                        )
-                    )
-                }
-            }
-        }
-    }
-}
-
-// Format price to match your requirements
-private fun formatPrice(price: Double): String {
-    return String.format("%,.0f", price)  // Format without decimal places
 }

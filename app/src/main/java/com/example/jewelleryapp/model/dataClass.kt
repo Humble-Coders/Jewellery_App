@@ -22,7 +22,7 @@ data class Product(
     val category_id: String = "",
     val material_id: String? = null,
     val material_type : String? = null,
-    val description: String = ""
+    val description: String = "",
     val category: String = ""
 )
 

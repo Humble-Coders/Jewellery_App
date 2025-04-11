@@ -53,13 +53,17 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.jewelleryapp.R
 import com.example.jewelleryapp.model.Product
 import com.example.jewelleryapp.screen.homeScreen.BottomNavigationBar
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 // Defined colors as constants
 private val GoldColor = Color(0xFFC4A661)
@@ -88,6 +92,7 @@ data class ProductSpec(
 fun JewelryProductScreen(
     productId: String,
     viewModel: ItemDetailViewModel,
+    navController: NavController,
     onBackClick: () -> Unit = {},
     onShareClick: () -> Unit = {},
     onAddToWishlistClick: () -> Unit = {},
@@ -126,7 +131,7 @@ fun JewelryProductScreen(
                 onShareClick = onShareClick
             )
         },
-        bottomBar = { BottomNavigationBar() }
+        bottomBar = { BottomNavigationBar(navController) }
     ) { paddingValues ->
         if (isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -134,7 +139,16 @@ fun JewelryProductScreen(
             }
         } else if (error != null) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Error: $error", color = Color.Red)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Error: $error", color = Color.Red)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = { viewModel.loadProduct(productId) },
+                        colors = ButtonDefaults.buttonColors(containerColor = GoldColor)
+                    ) {
+                        Text("Try Again")
+                    }
+                }
             }
         } else {
             product?.let { prod ->
@@ -145,7 +159,7 @@ fun JewelryProductScreen(
                         "Material",
                         if (!prod.material_id.isNullOrBlank()) {
                             val materialName = prod.material_id.replace("material_", "")
-                                .capitalize()
+                                .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
                             if (!prod.material_type.isNullOrBlank()) {
                                 "$materialName ${prod.material_type}"
                             } else {
@@ -218,24 +232,27 @@ fun JewelryProductScreen(
 
                         // Add this before the SimilarProducts section
                         Spacer(modifier = Modifier.height(16.dp))
-//                        Text(
-//                            text = "Debug - Similar products count: ${similarProducts.size}",
-//                            color = Color.Red
-//                        )
 
                         // Similar products section - now only here, removed duplicate section
                         if (similarProducts.isNotEmpty()) {
                             Spacer(modifier = Modifier.height(16.dp))
                             SimilarProducts(
                                 products = similarProducts,
-                                onProductClick = onProductClick
+                                onProductClick = onProductClick,
+                                onWishlistToggle = { similarProductId ->
+                                    // Toggle wishlist for similar products
+                                    viewModel.toggleSimilarProductWishlist(similarProductId)
+                                }
                             )
                         }
 
                         Spacer(modifier = Modifier.height(24.dp))
 
-                        // Add to wishlist button
-                        WishlistButton(onClick = { viewModel.toggleWishlist() })
+                        // Wishlist button that changes based on current wishlist status
+                        WishlistButton(
+                            isInWishlist = isWishlisted,
+                            onClick = { viewModel.toggleWishlist() }
+                        )
                     }
                 }
             } ?: run {
@@ -247,6 +264,9 @@ fun JewelryProductScreen(
         }
     }
 }
+
+
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -262,7 +282,9 @@ private fun ProductTopAppBar(
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Text(
                     text = title,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         },
@@ -275,7 +297,8 @@ private fun ProductTopAppBar(
             IconButton(onClick = onWishlistClick) {
                 Icon(
                     if (isWishlisted) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                    contentDescription = "Wishlist"
+                    contentDescription = "Wishlist",
+                    tint = if (isWishlisted) Color.Red else Color.Gray
                 )
             }
             IconButton(onClick = onShareClick) {
@@ -284,6 +307,29 @@ private fun ProductTopAppBar(
         }
     )
 }
+
+@Composable
+private fun WishlistButton(
+    isInWishlist: Boolean,
+    onClick: () -> Unit
+) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (isInWishlist) Color.White else ButtonColor
+        ),
+        border = BorderStroke(1.dp, if (isInWishlist) Color.Red else Color.Black)
+    ) {
+        Text(
+            text = if (isInWishlist) "Remove from Wishlist" else "Add to Wishlist",
+            color = if (isInWishlist) Color.Red else Color.Black,
+            modifier = Modifier.padding(vertical = 8.dp)
+        )
+    }
+}
+
+
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -447,7 +493,8 @@ private fun ProductDescription(description: String) {
 @Composable
 private fun SimilarProducts(
     products: List<Product>,
-    onProductClick: (String) -> Unit
+    onProductClick: (String) -> Unit,
+    onWishlistToggle: (String) -> Unit // Add wishlist toggle callback
 ) {
     Text(
         text = "You may also like",
@@ -465,7 +512,8 @@ private fun SimilarProducts(
         items(products) { product ->
             SimilarProductItem(
                 product = product,
-                onClick = { onProductClick(product.id) }
+                onClick = { onProductClick(product.id) },
+                onWishlistToggle = { onWishlistToggle(it) }
             )
         }
     }
@@ -474,7 +522,8 @@ private fun SimilarProducts(
 @Composable
 private fun SimilarProductItem(
     product: Product,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onWishlistToggle: (String) -> Unit = {} // Add wishlist toggle callback
 ) {
     Column(
         modifier = Modifier
@@ -494,6 +543,21 @@ private fun SimilarProductItem(
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
             )
+
+            // Add wishlist icon for similar products
+            IconButton(
+                onClick = { onWishlistToggle(product.id) },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(28.dp) // Smaller icon for similar products
+            ) {
+                Icon(
+                    imageVector = if (product.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    contentDescription = "Wishlist",
+                    tint = if (product.isFavorite) Color.Red else Color.White,
+                    modifier = Modifier.size(16.dp) // Smaller icon
+                )
+            }
         }
 
         Text(
@@ -526,6 +590,31 @@ private fun WishlistButton(onClick: () -> Unit) {
             text = "Add to Wishlist",
             color = Color.Black,
             modifier = Modifier.padding(vertical = 8.dp)
+        )
+    }
+}
+
+@Composable
+fun WishlistStatusIndicator(
+    isInWishlist: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+    iconSize: Dp = 24.dp,
+    containerSize: Dp = 36.dp
+) {
+    Box(
+        modifier = modifier
+            .size(containerSize)
+            .clip(CircleShape)
+            .background(Color.White.copy(alpha = 0.7f))
+            .clickable(onClick = onToggle),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = if (isInWishlist) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+            contentDescription = if (isInWishlist) "Remove from Wishlist" else "Add to Wishlist",
+            tint = if (isInWishlist) Color.Red else Color.Gray,
+            modifier = Modifier.size(iconSize)
         )
     }
 }

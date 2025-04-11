@@ -40,10 +40,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.jewelleryapp.R
 import com.example.jewelleryapp.model.Category
+import com.google.firebase.auth.FirebaseAuth
 import com.example.jewelleryapp.model.CarouselItem as CarouselItemModel
 import com.example.jewelleryapp.model.Category as CategoryModel
 import com.example.jewelleryapp.model.Collection as CollectionModel
@@ -65,7 +67,8 @@ fun HomeScreen(
     viewModel: HomeViewModel,
     onCategoryClick: (String) -> Unit = {},
     onProductClick: (String) -> Unit = {},
-    onCollectionClick: (String) -> Unit = {}
+    onCollectionClick: (String) -> Unit = {},
+    navController: NavController
 ) {
     // Collect state flows
     val categories by viewModel.categories.collectAsState()
@@ -86,13 +89,13 @@ fun HomeScreen(
             ModalDrawerSheet(
                 modifier = Modifier.fillMaxWidth(0.75f)
             ) {
-                DrawerContent { scope.launch { drawerState.close() } }
+                DrawerContent(navController) { scope.launch { drawerState.close() } }
             }
         }
     ) {
         Scaffold(
             topBar = { TopAppbar("Gagan Jewellers", onMenuClick = { scope.launch { drawerState.open() } })},
-            bottomBar = { BottomNavigationBar() }
+            bottomBar = { BottomNavigationBar(navController = navController) }
         ) { paddingValues ->
             if (isLoading) {
                 Box(
@@ -138,7 +141,7 @@ fun HomeScreen(
                 ) {
                     ImageCarousel(carouselItems)
                     CategoryRow(categories, onCategoryClick)
-                    FeaturedProductsSection(featuredProducts, onProductClick)
+                    FeaturedProductsSection(featuredProducts, viewModel,onProductClick)
                     ThemedCollectionsSection(collections, onCollectionClick)
                 }
             }
@@ -147,10 +150,12 @@ fun HomeScreen(
 }
 
 // Top app bar with search and cart
+// Top app bar with search and cart, with optional back button
 @Composable
 fun TopAppbar(
     title: String,
-    onMenuClick: () -> Unit = {}
+    onMenuClick: () -> Unit = {},
+    onBackClick: (() -> Unit)? = null // Optional back button handler
 ) {
     val amberColor = Color(0xFFB78628) // Approximate amber/gold color
 
@@ -168,12 +173,24 @@ fun TopAppbar(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onMenuClick) {
-                Icon(
-                    imageVector = Icons.Default.Menu,
-                    contentDescription = "Menu",
-                    tint = amberColor
-                )
+            if (onBackClick != null) {
+                // Show back button if onBackClick is provided
+                IconButton(onClick = onBackClick) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "Back",
+                        tint = amberColor
+                    )
+                }
+            } else {
+                // Otherwise show menu button
+                IconButton(onClick = onMenuClick) {
+                    Icon(
+                        imageVector = Icons.Default.Menu,
+                        contentDescription = "Menu",
+                        tint = amberColor
+                    )
+                }
             }
 
             Text(
@@ -365,7 +382,11 @@ fun CategoryItem(category: CategoryModel, onCategoryClick: (String) -> Unit) {
 
 // Featured products section
 @Composable
-fun FeaturedProductsSection(products: List<ProductModel>, onProductClick: (String) -> Unit) {
+fun FeaturedProductsSection(
+    products: List<ProductModel>,
+    viewModel: HomeViewModel, // Pass viewModel to handle wishlist functionality
+    onProductClick: (String) -> Unit
+) {
     if (products.isEmpty()) return
 
     Column(
@@ -382,12 +403,15 @@ fun FeaturedProductsSection(products: List<ProductModel>, onProductClick: (Strin
             modifier = Modifier.height(350.dp)
         ) {
             items(products) { product ->
-                ProductItem(product, onProductClick)
+                ProductItem(
+                    product = product,
+                    onProductClick = onProductClick,
+                    viewModel = viewModel // Pass viewModel to handle wishlist
+                )
             }
         }
     }
 }
-
 // Section title component
 @Composable
 fun SectionTitle(title: String) {
@@ -399,8 +423,23 @@ fun SectionTitle(title: String) {
 }
 
 // Individual product item
+// Individual product item with wishlist functionality
 @Composable
-fun ProductItem(product: ProductModel, onProductClick: (String) -> Unit) {
+fun ProductItem(
+    product: ProductModel,
+    onProductClick: (String) -> Unit,
+    viewModel: HomeViewModel // Add ViewModel parameter to handle wishlist
+) {
+    // Track wishlist status with state
+    val isInWishlist by remember(product.id) {
+        mutableStateOf(product.isFavorite)
+    }
+
+    // Track any updates to wishlist status
+    LaunchedEffect(product.id) {
+        viewModel.checkWishlistStatus(product.id)
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -431,9 +470,11 @@ fun ProductItem(product: ProductModel, onProductClick: (String) -> Unit) {
                     placeholder = painterResource(id = R.drawable.diamondring_homescreen) // Placeholder from resources
                 )
 
-                // Favorite icon
+                // Favorite icon with clickable area and proper wishlist status
                 IconButton(
-                    onClick = { /* Handle favorite */ },
+                    onClick = {
+                        viewModel.toggleFavorite(product.id)
+                    },
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .size(32.dp)
@@ -559,20 +600,32 @@ fun CollectionItem(collection: CollectionModel, onCollectionClick: (String) -> U
 // Removed Recently Viewed section as requested
 
 @Composable
-fun BottomNavigationBar() {
+fun BottomNavigationBar(navController: NavController) {
     val amberColor = Color(0xFFB4A06C) // Amber/gold color for all icons
+
+    // Get current route to determine which item is selected
+    val currentRoute = navController.currentDestination?.route
+    val currentRouteBase = currentRoute?.split("/")?.firstOrNull()
 
     NavigationBar(
         containerColor = Color.White
     ) {
         val items = listOf(
-            Triple(Icons.Default.Home, "Home", true),
-            Triple(Icons.Default.GridView, "Categories", false),
-            Triple(Icons.Default.FavoriteBorder, "Favorites", false),
-            Triple(Icons.Default.Person, "Profile", false)
+            Triple(Icons.Default.Home, "Home", "home"),
+            Triple(Icons.Default.GridView, "Categories", "category"),
+            Triple(Icons.Default.FavoriteBorder, "Favorites", "wishlist"),
+            Triple(Icons.Default.Person, "Profile", "profile")
         )
 
-        items.forEach { (icon, label, selected) ->
+        items.forEach { (icon, label, route) ->
+            val selected = when {
+                route == "home" && currentRouteBase == "home" -> true
+                route == "category" && currentRouteBase == "category" -> true
+                route == "wishlist" && currentRouteBase == "wishlist" -> true
+                route == "profile" && currentRouteBase == "profile" -> true
+                else -> false
+            }
+
             NavigationBarItem(
                 icon = {
                     Icon(
@@ -589,15 +642,32 @@ fun BottomNavigationBar() {
                     )
                 },
                 selected = selected,
-                onClick = { /* Handle navigation */ }
+                onClick = {
+                    if (!selected) {
+                        when (route) {
+                            "home" -> navController.navigate("home") {
+                                popUpTo("home") { inclusive = true }
+                            }
+                            "category" -> navController.navigate("category/all") {
+                                popUpTo("home")
+                            }
+                            "wishlist" -> navController.navigate("wishlist") {
+                                popUpTo("home")
+                            }
+                            "profile" -> {
+                                // Profile is not implemented, so we don't navigate
+                                // You can add navigation once profile screen is added
+                            }
+                        }
+                    }
+                }
             )
         }
     }
 }
 
 @Composable
-fun DrawerContent(onItemClick: () -> Unit) {
-
+fun DrawerContent(navController: NavController, onCloseDrawer: () -> Unit) {
     val amberColor = Color(0xFFB78628)
 
     Column(
@@ -637,34 +707,119 @@ fun DrawerContent(onItemClick: () -> Unit) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        HorizontalDivider(thickness = 1.dp, color = Color.LightGray) // 👈 Line under "Hi Shreya!"
+        HorizontalDivider(thickness = 1.dp, color = Color.LightGray) // Line under "Hi!"
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        DrawerItem(icon = Icons.Outlined.Person, text = "My Profile", onClick = onItemClick)
-        DrawerItem(icon = Icons.Outlined.History, text = "Order History", onClick = onItemClick)
+        // Profile and Order History
+        DrawerItem(
+            icon = Icons.Outlined.Person,
+            text = "My Profile",
+            onClick = {
+                // Navigate to profile when implemented
+                onCloseDrawer()
+            }
+        )
+
+        DrawerItem(
+            icon = Icons.Outlined.History,
+            text = "Order History",
+            onClick = {
+                // Navigate to order history when implemented
+                onCloseDrawer()
+            }
+        )
 
         SectionHeader("Shop By")
-        DrawerItem("All Jewellery", onItemClick)
-        DrawerItem("Metal", onItemClick)
-        DrawerItem("Collections", onItemClick)
+        DrawerItem(
+            text = "All Jewellery",
+            onClick = {
+                navController.navigate("home") {
+                    popUpTo("home") { inclusive = true }
+                }
+                onCloseDrawer()
+            }
+        )
+
+        DrawerItem(
+            text = "Metal",
+            onClick = {
+                // Navigate to metal category
+                navController.navigate("category/metals")
+                onCloseDrawer()
+            }
+        )
+
+        DrawerItem(
+            text = "Collections",
+            onClick = {
+                // Navigate to collections
+                navController.navigate("collection/all")
+                onCloseDrawer()
+            }
+        )
 
         SectionHeader("Shop For")
-        DrawerItem("Men", onItemClick)
-        DrawerItem("Kids", onItemClick)
+        DrawerItem(
+            text = "Men",
+            onClick = {
+                // Navigate to men's category
+                navController.navigate("category/men")
+                onCloseDrawer()
+            }
+        )
+
+        DrawerItem(
+            text = "Kids",
+            onClick = {
+                // Navigate to kids category
+                navController.navigate("category/kids")
+                onCloseDrawer()
+            }
+        )
 
         SectionHeader("More")
-        DrawerItem(icon = Icons.Outlined.AttachMoney, text = "Gold Rate", onClick = onItemClick)
-        DrawerItem(icon = Icons.Outlined.Headset, text = "Get In Touch", onClick = onItemClick)
-        DrawerItem(icon = Icons.Outlined.LocationOn, text = "Store Locator", onClick = onItemClick)
+        DrawerItem(
+            icon = Icons.Outlined.AttachMoney,
+            text = "Gold Rate",
+            onClick = {
+                // Navigate to gold rate screen when implemented
+                onCloseDrawer()
+            }
+        )
+
+        DrawerItem(
+            icon = Icons.Outlined.Headset,
+            text = "Get In Touch",
+            onClick = {
+                // Navigate to contact screen when implemented
+                onCloseDrawer()
+            }
+        )
+
+        DrawerItem(
+            icon = Icons.Outlined.LocationOn,
+            text = "Store Locator",
+            onClick = {
+                // Navigate to store locator when implemented
+                onCloseDrawer()
+            }
+        )
+
         DrawerItem(
             icon = Icons.AutoMirrored.Outlined.ExitToApp,
             text = "Logout",
-            onClick = onItemClick
+            onClick = {
+                // Handle logout
+                FirebaseAuth.getInstance().signOut()
+                navController.navigate("login") {
+                    popUpTo(0) { inclusive = true }
+                }
+                onCloseDrawer()
+            }
         )
     }
 }
-
 @Composable
 fun DrawerItem(text: String, onClick: () -> Unit, icon: ImageVector? = null) {
     Row(

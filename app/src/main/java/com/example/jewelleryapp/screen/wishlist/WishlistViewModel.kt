@@ -29,11 +29,18 @@ class WishlistViewModel(private val repository: JewelryRepository) : ViewModel()
     val error: StateFlow<String?> = _error
 
     init {
+        Log.d("WishlistViewModel", "Initializing WishlistViewModel")
+        loadCategories()
+        refreshWishlistItems()
+    }
+
+    fun refreshWishlistItems() {
         viewModelScope.launch {
             try {
                 _isLoading.value = true
                 _error.value = null  // Clear any previous errors
-                Log.d("WishlistViewModel", "Initializing WishlistViewModel")
+
+                Log.d("WishlistViewModel", "Refreshing wishlist items")
 
                 // First add test items if wishlist is empty
                 try {
@@ -44,19 +51,19 @@ class WishlistViewModel(private val repository: JewelryRepository) : ViewModel()
                     // Continue anyway - we'll try to load whatever's in the wishlist
                 }
 
-                // Then load categories and wishlist items
-                loadCategories()
+                // Then load wishlist items
                 loadWishlistItems()
 
-                Log.d("WishlistViewModel", "Initialization complete")
+                Log.d("WishlistViewModel", "Refresh complete")
             } catch (e: Exception) {
-                Log.e("WishlistViewModel", "Error during initialization", e)
-                _error.value = "Failed to initialize: ${e.message}"
+                Log.e("WishlistViewModel", "Error during refresh", e)
+                _error.value = "Failed to load wishlist: ${e.message}"
             } finally {
                 _isLoading.value = false
             }
         }
     }
+
     private fun loadCategoryProducts(categoryId: String) {
         viewModelScope.launch {
             try {
@@ -80,9 +87,11 @@ class WishlistViewModel(private val repository: JewelryRepository) : ViewModel()
             try {
                 repository.getCategories().collect { fetchedCategories ->
                     _categories.value = fetchedCategories
+                    Log.d("WishlistViewModel", "Loaded ${fetchedCategories.size} categories")
                 }
             } catch (e: Exception) {
                 _error.value = "Failed to load categories: ${e.message}"
+                Log.e("WishlistViewModel", "Failed to load categories", e)
             }
         }
     }
@@ -145,14 +154,26 @@ class WishlistViewModel(private val repository: JewelryRepository) : ViewModel()
         Log.d("WishlistViewModel", "Filtered to ${filteredItems.size} items for category: ${_selectedCategory.value}")
         _wishlistItems.value = filteredItems
     }
+
     fun removeFromWishlist(productId: String) {
         viewModelScope.launch {
             try {
+                _isLoading.value = true
+                Log.d("WishlistViewModel", "Removing product $productId from wishlist")
+
+                // Call repository to remove from wishlist
                 repository.removeFromWishlist(productId)
-                // Remove from sample data
+
+                // Remove from local lists
+                _allWishlistItems.value = _allWishlistItems.value.filter { it.id != productId }
                 _wishlistItems.value = _wishlistItems.value.filter { it.id != productId }
+
+                Log.d("WishlistViewModel", "Successfully removed product from wishlist")
             } catch (e: Exception) {
-                _error.value = e.message
+                Log.e("WishlistViewModel", "Failed to remove from wishlist", e)
+                _error.value = "Failed to remove from wishlist: ${e.message}"
+            } finally {
+                _isLoading.value = false
             }
         }
     }
