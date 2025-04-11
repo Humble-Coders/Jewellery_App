@@ -1,13 +1,16 @@
 package com.example.jewelleryapp.repository
 
 import android.util.Log
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.example.jewelleryapp.model.Category
 import com.example.jewelleryapp.model.Collection
 import com.example.jewelleryapp.model.Product
 import com.example.jewelleryapp.model.CarouselItem
+import com.google.firebase.firestore.DocumentSnapshot
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import java.lang.Exception
 
@@ -491,5 +494,134 @@ class JewelryRepository(
             Log.e(TAG, "Error removing from wishlist", e)
             false
         }
+    }
+
+    suspend fun getProductDetails(productId: String): Flow<Product> = flow {
+        try {
+            val documentSnapshot = firestore.collection("products")
+                .document(productId)
+                .get()
+                .await()
+
+            if (documentSnapshot.exists()) {
+                // Get the first image URL from the images array
+                val imageUrls = documentSnapshot.get("images") as? List<*>
+                val firstImageUrl = imageUrls?.firstOrNull()?.toString() ?: ""
+                val httpsImageUrl = storageHelper.getDownloadUrl(firstImageUrl)
+
+                val product = Product(
+                    id = documentSnapshot.id,
+                    name = documentSnapshot.getString("name") ?: "",
+                    price = documentSnapshot.getDouble("price") ?: 0.0,
+                    currency = documentSnapshot.getString("currency") ?: "Rs",
+                    category_id = documentSnapshot.getString("category_id") ?: "",
+                    imageUrl = httpsImageUrl,
+                    material_id = documentSnapshot.getString("material_id") ?: "",
+                    material_type = documentSnapshot.getString("material_type") ?: "",
+                    stone = documentSnapshot.getString("stone") ?: "",
+                    clarity = documentSnapshot.getString("clarity") ?: "",
+                    cut = documentSnapshot.getString("cut") ?: "",
+                    description = documentSnapshot.getString("description") ?: "",
+                    isFavorite = false // This will be updated later with user-specific data
+                )
+                emit(product)
+            } else {
+                throw Exception("Product not found")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching product details", e)
+            throw e
+        }
+    }
+
+    suspend fun getProductsByCategory(categoryId: String, excludeProductId: String? = null): Flow<List<Product>> = flow {
+        try {
+            // Step 1: Get product IDs from category_products
+            val categorySnapshot = firestore.collection("category_products")
+                .document(categoryId)
+                .get()
+                .await()
+
+            val productIds = categorySnapshot.get("product_ids") as? List<String> ?: emptyList()
+
+            // Step 2: Query products using whereIn (max 10)
+            if (productIds.isNotEmpty()) {
+                val snapshot = firestore.collection("products")
+                    .whereIn("id", productIds.take(10)) // Firestore limit
+                    .get()
+                    .await()
+
+                val products = snapshot.documents
+                    .filter { it.id != excludeProductId } // Exclude the current product if needed
+                    .map { doc ->
+                        val imageUrls = doc.get("images") as? List<*>
+                        val firstImageUrl = imageUrls?.firstOrNull()?.toString() ?: ""
+                        val httpsImageUrl = storageHelper.getDownloadUrl(firstImageUrl)
+
+                        Product(
+                            id = doc.id,
+                            name = doc.getString("name") ?: "",
+                            price = doc.getDouble("price") ?: 0.0,
+                            currency = doc.getString("currency") ?: "Rs",
+                            category_id = doc.getString("category_id") ?: "",
+                            imageUrl = httpsImageUrl,
+                            material = doc.getString("material") ?: "",
+                            stone = doc.getString("stone") ?: "",
+                            clarity = doc.getString("clarity") ?: "",
+                            cut = doc.getString("cut") ?: "",
+                            isFavorite = false
+                        )
+                    }
+
+                Log.d(TAG, "Fetched ${products.size} products for category $categoryId")
+                emit(products)
+            } else {
+                emit(emptyList())
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching products by category", e)
+            emit(emptyList())
+        }
+    }
+
+
+    // Function to toggle wishlist status
+    suspend fun toggleWishlist(productId: String, userId: String) {
+        try {
+            val wishlistRef = firestore.collection("users")
+                .document(userId)
+                .collection("wishlist")
+                .document(productId)
+
+            val doc = wishlistRef.get().await()
+            if (doc.exists()) {
+                wishlistRef.delete().await()
+            } else {
+                wishlistRef.set(mapOf(
+                    "timestamp" to com.google.firebase.Timestamp.now()
+                )).await()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error toggling wishlist", e)
+            throw e
+        }
+    }
+
+    // Function to check if a product is in wishlist
+    suspend fun isInWishlist(productId: String): Boolean {
+        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return false
+        return isProductInWishlist(userId, productId)
+    }
+
+    // Function to add a product to wishlist
+    suspend fun addToWishlist(productId: String): Boolean {
+        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return false
+        return addToWishlist(userId, productId)
+    }
+
+    // Function to remove a product from wishlist
+    suspend fun removeFromWishlist(productId: String): Boolean {
+        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return false
+        return removeFromWishlist(userId, productId)
     }
 }

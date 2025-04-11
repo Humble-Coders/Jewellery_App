@@ -15,6 +15,14 @@ data class Product(
     val currency: String = "Rs",
     val imageUrl: String,
     val isFavorite: Boolean = false,
+    val material: String = "",
+    val stone: String = "",
+    val clarity: String = "",
+    val cut: String = "",
+    val category_id: String = "",
+    val material_id: String? = null,
+    val material_type : String? = null,
+    val description: String = ""
     val category: String = ""
 )
 

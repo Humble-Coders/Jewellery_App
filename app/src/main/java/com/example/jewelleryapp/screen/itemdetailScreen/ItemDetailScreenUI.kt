@@ -1,5 +1,6 @@
 package com.example.jewelleryapp.screen.itemdetailScreen
 
+import android.util.Log
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -8,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,6 +33,7 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -38,11 +41,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,7 +55,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.jewelleryapp.R
+import com.example.jewelleryapp.model.Product
 import com.example.jewelleryapp.screen.homeScreen.BottomNavigationBar
 import kotlinx.coroutines.launch
 
@@ -66,7 +70,7 @@ private val TextGrayColor = Color.Gray
 private val TextDescriptionColor = Color(0xFF4B5563)
 private val TextPriceColor = Color(0xFF333333)
 
-// Data models
+// Data models for similar products display
 data class SimilarProductData(
     val imageId: Int,
     val title: String,
@@ -76,97 +80,169 @@ data class SimilarProductData(
 data class ProductSpec(
     val iconId: Int,
     val title: String,
-    val value: String
+    val value: String?,
 )
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun JewelryProductScreen(
+    productId: String,
+    viewModel: ItemDetailViewModel,
     onBackClick: () -> Unit = {},
     onShareClick: () -> Unit = {},
-    onAddToWishlistClick: () -> Unit = {}
+    onAddToWishlistClick: () -> Unit = {},
+    onProductClick: (String) -> Unit = {}
 ) {
-    var isWishlisted by remember { mutableStateOf(false) }
+    val product by viewModel.product.collectAsState()
+    val isWishlisted by viewModel.isInWishlist.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
     val scrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
+    val similarProducts by viewModel.similarProducts.collectAsState()
 
-    // Sample data
-    val imageList = listOf(
-        R.drawable.diamondring_homescreen,
-        R.drawable.diamondring_homescreen,
-        R.drawable.diamondring_homescreen
-    )
+    // Load product when screen opens
+    LaunchedEffect(productId) {
+        viewModel.loadProduct(productId)
+    }
 
-    val specs = listOf(
-        ProductSpec(R.drawable.material_icon, "Material", "18K White Gold"),
-        ProductSpec(R.drawable.stone, "Stone", "1.5ct Diamond"),
-        ProductSpec(R.drawable.clarity, "Clarity", "VS1"),
-        ProductSpec(R.drawable.cut, "Cut", "Excellent")
-    )
-
-    val similarProducts = listOf(
-        SimilarProductData(R.drawable.diamondring_homescreen, "Diamond Solitaire", "$3,999"),
-        SimilarProductData(R.drawable.diamondring_homescreen, "Pearl Ring", "$1,999"),
-        SimilarProductData(R.drawable.diamondring_homescreen, "Sapphire Ring", "$2,499")
-    )
-    val pagerState = rememberPagerState(pageCount = { imageList.size })
+    // Fetch similar products when product is loaded
+    LaunchedEffect(product) {
+        product?.let {
+            if (it.category_id.isNotBlank()) {
+                Log.d("JewelryProductScreen", "Loading similar products for category: ${it.category_id}")
+                viewModel.loadSimilarProducts()
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
             ProductTopAppBar(
-                title = "Luxury Jewelry",
+                title = product?.name ?: "Luxury Jewelry",
                 isWishlisted = isWishlisted,
                 onBackClick = onBackClick,
-                onWishlistClick = { isWishlisted = !isWishlisted },
+                onWishlistClick = { viewModel.toggleWishlist() },
                 onShareClick = onShareClick
             )
         },
         bottomBar = { BottomNavigationBar() }
     ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .padding(paddingValues)
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-        ) {
-            // Image carousel
-            ImageCarousel(
-                images = imageList,
-                pagerState = pagerState,
-                onDotClick = { index ->
-                    coroutineScope.launch {
-                        pagerState.animateScrollToPage(index)
+        if (isLoading) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = GoldColor)
+            }
+        } else if (error != null) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Error: $error", color = Color.Red)
+            }
+        } else {
+            product?.let { prod ->
+                // Create specs list with null handling for missing fields
+                val specs = listOf(
+                    ProductSpec(
+                        R.drawable.material_icon,
+                        "Material",
+                        if (!prod.material_id.isNullOrBlank()) {
+                            val materialName = prod.material_id.replace("material_", "")
+                                .capitalize()
+                            if (!prod.material_type.isNullOrBlank()) {
+                                "$materialName ${prod.material_type}"
+                            } else {
+                                materialName
+                            }
+                        } else {
+                            null
+                        }
+                    ),
+                    ProductSpec(R.drawable.stone, "Stone", prod.stone.ifEmpty { null }),
+                    ProductSpec(R.drawable.clarity, "Clarity", prod.clarity.ifEmpty { null }),
+                    ProductSpec(R.drawable.cut, "Cut", prod.cut.ifEmpty { null })
+                )
+
+                // Create a list of image URLs (currently single image from Firebase)
+                val imageList = if (prod.imageUrl.isNotBlank()) listOf(prod.imageUrl) else emptyList()
+                val pagerState = rememberPagerState(pageCount = { maxOf(imageList.size, 1) })
+
+                Column(
+                    modifier = Modifier
+                        .padding(paddingValues)
+                        .fillMaxSize()
+                        .verticalScroll(scrollState)
+                ) {
+                    // Image carousel with Firebase images or placeholder
+                    if (imageList.isNotEmpty()) {
+                        ImageCarouselWithCoil(
+                            imageUrls = imageList,
+                            pagerState = pagerState,
+                            onDotClick = { index ->
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(index)
+                                }
+                            }
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(300.dp)
+                                .background(BackgroundColor),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("No image available", color = Color.White)
+                        }
+                    }
+
+                    // Product details
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        // Product title and collection
+                        ProductHeader(
+                            title = prod.name,
+                            collection = "Luxury Collection", // Placeholder since Firebase doesn't have collection field
+                            currentPrice = "${prod.currency} ${prod.price}",
+                            originalPrice = "${prod.currency} ${(prod.price * 1.2).toInt()}" // Placeholder for original price
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Product specifications
+                        ProductSpecifications(specs = specs)
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Description (using description from Firebase if available)
+                        val description = if (prod.description.isNotBlank()) {
+                            prod.description
+                        } else {
+                            "This exquisite piece features perfectly matched stones set in premium metal. Each piece is carefully crafted for exceptional quality and brilliance."
+                        }
+                        ProductDescription(description = description)
+
+                        // Add this before the SimilarProducts section
+                        Spacer(modifier = Modifier.height(16.dp))
+//                        Text(
+//                            text = "Debug - Similar products count: ${similarProducts.size}",
+//                            color = Color.Red
+//                        )
+
+                        // Similar products section - now only here, removed duplicate section
+                        if (similarProducts.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            SimilarProducts(
+                                products = similarProducts,
+                                onProductClick = onProductClick
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        // Add to wishlist button
+                        WishlistButton(onClick = { viewModel.toggleWishlist() })
                     }
                 }
-            )
-            // Product details
-            Column(modifier = Modifier.padding(16.dp)) {
-                // Product title and collection
-                ProductHeader(
-                    title = "Diamond Eternity Ring",
-                    collection = "Timeless Collection",
-                    currentPrice = "$4,999",
-                    originalPrice = "$5,999"
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Product specifications
-                ProductSpecifications(specs = specs)
-                Spacer(modifier = Modifier.height(16.dp))
-                // Description
-                ProductDescription(
-                    description = "This exquisite diamond eternity ring features perfectly matched round brilliant diamonds set in 18K white gold. Each stone is carefully selected for its exceptional cut, clarity, and brilliance, creating a seamless circle of light around your finger."
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Similar products
-                SimilarProducts(products = similarProducts)
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Add to wishlist button
-                WishlistButton(onClick = onAddToWishlistClick)
+            } ?: run {
+                // No product loaded
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Product not found", color = Color.Red)
+                }
             }
         }
     }
@@ -211,8 +287,8 @@ private fun ProductTopAppBar(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ImageCarousel(
-    images: List<Int>,
+private fun ImageCarouselWithCoil(
+    imageUrls: List<String>,
     pagerState: androidx.compose.foundation.pager.PagerState,
     onDotClick: (Int) -> Unit
 ) {
@@ -226,8 +302,8 @@ private fun ImageCarousel(
             state = pagerState,
             modifier = Modifier.fillMaxSize()
         ) { page ->
-            Image(
-                painter = painterResource(id = images[page]),
+            AsyncImage(
+                model = imageUrls[page],
                 contentDescription = "Product Image ${page + 1}",
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
@@ -241,7 +317,7 @@ private fun ImageCarousel(
                 .padding(bottom = 16.dp),
             horizontalArrangement = Arrangement.Center
         ) {
-            repeat(images.size) { index ->
+            repeat(imageUrls.size) { index ->
                 Box(
                     modifier = Modifier
                         .padding(horizontal = 4.dp)
@@ -285,7 +361,7 @@ private fun ProductHeader(
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = " $originalPrice",
+            text = "$originalPrice",
             fontSize = 16.sp,
             color = TextGrayColor,
             textDecoration = TextDecoration.LineThrough,
@@ -296,6 +372,7 @@ private fun ProductHeader(
 
 @Composable
 private fun ProductSpecifications(specs: List<ProductSpec>) {
+    // Display all specs regardless of null values
     Column {
         for (i in specs.indices step 2) {
             Row(
@@ -339,13 +416,16 @@ private fun ProductSpecItem(spec: ProductSpec) {
                 color = TextGrayColor
             )
             Text(
-                text = spec.value,
+                text = spec.value ?: "Not specified",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium
             )
         }
     }
 }
+
+
+
 @Composable
 private fun ProductDescription(description: String) {
     Text(
@@ -365,7 +445,10 @@ private fun ProductDescription(description: String) {
 }
 
 @Composable
-private fun SimilarProducts(products: List<SimilarProductData>) {
+private fun SimilarProducts(
+    products: List<Product>,
+    onProductClick: (String) -> Unit
+) {
     Text(
         text = "You may also like",
         fontSize = 18.sp,
@@ -376,20 +459,28 @@ private fun SimilarProducts(products: List<SimilarProductData>) {
 
     LazyRow(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp)
     ) {
         items(products) { product ->
-            SimilarProductItem(product = product)
+            SimilarProductItem(
+                product = product,
+                onClick = { onProductClick(product.id) }
+            )
         }
     }
 }
 
 @Composable
-private fun SimilarProductItem(product: SimilarProductData) {
+private fun SimilarProductItem(
+    product: Product,
+    onClick: () -> Unit
+) {
     Column(
         modifier = Modifier
             .width(140.dp)
             .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
     ) {
         Box(
             modifier = Modifier
@@ -397,27 +488,28 @@ private fun SimilarProductItem(product: SimilarProductData) {
                 .height(140.dp)
                 .background(Color.LightGray)
         ) {
-            Image(
-                painter = painterResource(id = product.imageId),
-                contentDescription = product.title,
+            AsyncImage(
+                model = product.imageUrl,
+                contentDescription = product.name,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
             )
         }
 
         Text(
-            text = product.title,
+            text = product.name,
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
-            modifier = Modifier.padding(top = 4.dp)
+            modifier = Modifier.padding(top = 4.dp, start = 4.dp, end = 4.dp)
         )
 
         Text(
-            text = product.price,
+            text = "${product.currency} ${product.price}",
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
-            color = TextPriceColor
+            color = TextPriceColor,
+            modifier = Modifier.padding(bottom = 4.dp, start = 4.dp, end = 4.dp)
         )
     }
 }
@@ -437,3 +529,4 @@ private fun WishlistButton(onClick: () -> Unit) {
         )
     }
 }
+
