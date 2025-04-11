@@ -23,6 +23,7 @@ data class Product(
     val material_id: String? = null,
     val material_type : String? = null,
     val description: String = ""
+    val category: String = ""
 )
 
 data class Collection(
