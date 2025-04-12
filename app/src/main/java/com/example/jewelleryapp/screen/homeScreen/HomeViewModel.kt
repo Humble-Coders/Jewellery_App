@@ -7,6 +7,7 @@ import com.example.jewelleryapp.model.CarouselItem
 import com.example.jewelleryapp.model.Category
 import com.example.jewelleryapp.model.Collection
 import com.example.jewelleryapp.model.Product
+import com.example.jewelleryapp.repository.CachedJewelryRepository
 import com.example.jewelleryapp.repository.JewelryRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -80,9 +81,27 @@ class HomeViewModel(private val repository: JewelryRepository) : ViewModel() {
         }
     }
 
-    // Function to refresh all data
+    // Function to refresh all data - forces a refresh from the repository
     fun refreshData() {
-        loadData()
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                _error.value = null
+
+                // If using CachedJewelryRepository, explicitly trigger a refresh
+                if (repository is CachedJewelryRepository) {
+                    Log.d(TAG, "Explicitly refreshing cache from ViewModel")
+                    repository.refreshData()
+                }
+
+                // Load data as usual after refresh
+                loadData()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error during manual refresh", e)
+                _error.value = "Failed to refresh data: ${e.message}"
+                _isLoading.value = false
+            }
+        }
     }
 
     // Called when a product is viewed

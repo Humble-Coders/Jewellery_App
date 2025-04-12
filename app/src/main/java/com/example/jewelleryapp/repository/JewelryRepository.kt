@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import java.lang.Exception
 
-class JewelryRepository(
+open class JewelryRepository(
     private val userId: String, // Add this parameter
     private val firestore: FirebaseFirestore,
     private val storageHelper: FirebaseStorageHelper
@@ -98,7 +98,7 @@ class JewelryRepository(
         }
     }
 
-    suspend fun removeFromWishlist(productId: String) {
+    open suspend fun removeFromWishlist(productId: String) {
         try {
             if (userId.isBlank()) {
                 Log.e(TAG, "Cannot remove from wishlist: User ID is blank")
@@ -121,7 +121,7 @@ class JewelryRepository(
         }
     }
 
-    suspend fun addToWishlist(productId: String) {
+    open suspend fun addToWishlist(productId: String) {
         try {
             if (userId.isBlank()) {
                 Log.e(TAG, "Cannot add to wishlist: User ID is blank")
@@ -237,7 +237,7 @@ class JewelryRepository(
         return products
     }
 
-    suspend fun getCategories(): Flow<List<Category>> = flow {
+    open suspend fun getCategories(): Flow<List<Category>> = flow {
         try {
             val snapshot = firestore.collection("categories")
                 .orderBy("order")
@@ -262,7 +262,7 @@ class JewelryRepository(
         }
     }
 
-    suspend fun getFeaturedProducts(): Flow<List<Product>> = flow {
+    open suspend fun getFeaturedProducts(): Flow<List<Product>> = flow {
         try {
             // Make sure the wishlist cache is up to date
             refreshWishlistCache()
@@ -329,7 +329,7 @@ class JewelryRepository(
         }
     }
 
-    suspend fun getThemedCollections(): Flow<List<Collection>> = flow {
+    open suspend fun getThemedCollections(): Flow<List<Collection>> = flow {
         try {
             val snapshot = firestore.collection("themed_collections")
                 .orderBy("order")
@@ -358,7 +358,7 @@ class JewelryRepository(
         }
     }
 
-    suspend fun getCarouselItems(): Flow<List<CarouselItem>> = flow {
+    open suspend fun getCarouselItems(): Flow<List<CarouselItem>> = flow {
         try {
             val snapshot = firestore.collection("carousel_items")
                 .get()

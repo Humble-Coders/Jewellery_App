@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.jewelleryapp.model.Product
+import com.example.jewelleryapp.repository.CachedJewelryRepository
 import com.example.jewelleryapp.repository.JewelryRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -180,6 +181,35 @@ class ItemDetailViewModel(
             } catch (e: Exception) {
                 Log.e(TAG, "Error loading similar products", e)
                 _similarProducts.value = emptyList()
+            }
+        }
+    }
+
+    // Force refresh product data - useful if cache is stale
+    fun refreshProductData(productId: String) {
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                _error.value = null
+
+                // If using CachedJewelryRepository, explicitly trigger a refresh
+                if (repository is CachedJewelryRepository) {
+                    Log.d(TAG, "Explicitly refreshing cache from ViewModel")
+                    repository.refreshData()
+                }
+
+                // Reload the product
+                loadProduct(productId)
+
+                // Reload similar products if we have a current product
+                product.value?.let {
+                    loadSimilarProducts()
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Error during product refresh", e)
+                _error.value = "Failed to refresh product: ${e.message}"
+                _isLoading.value = false
             }
         }
     }

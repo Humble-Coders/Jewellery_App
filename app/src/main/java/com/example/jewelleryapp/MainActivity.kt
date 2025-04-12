@@ -5,23 +5,37 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.navigation.NavController
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.jewelleryapp.repository.CachedJewelryRepository
 import com.example.jewelleryapp.repository.FirebaseAuthRepository
 import com.example.jewelleryapp.repository.FirebaseStorageHelper
-import com.example.jewelleryapp.repository.JewelryRepository
 import com.example.jewelleryapp.screen.categoriesScreen.CategoriesViewModel
 import com.example.jewelleryapp.screen.categoriesScreen.CategoryScreenView
 import com.example.jewelleryapp.screen.homeScreen.HomeScreen
@@ -37,6 +51,7 @@ import com.example.jewelleryapp.screen.wishlist.WishlistViewModel
 import com.example.jewelleryapp.ui.theme.JewelleryAppTheme
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
     private lateinit var loginViewModel: LoginViewModel
@@ -57,12 +72,24 @@ class MainActivity : ComponentActivity() {
 
         val storageHelper = FirebaseStorageHelper()
 
+        // Get the CacheManager from the Application
+        val cacheManager = (application as JewelryApplication).cacheManager
+
         // Initialize Repositories
         val authRepository = FirebaseAuthRepository(firebaseAuth)
+
         // Get current user ID for repository (or empty string if not logged in)
         val userId = firebaseAuth.currentUser?.uid ?: ""
         Log.d("MainActivity", "User ID: $userId")
-        val jewelryRepository = JewelryRepository(userId, firestore, storageHelper)
+
+        // Use CachedJewelryRepository instead of JewelryRepository
+        val jewelryRepository = CachedJewelryRepository(
+            userId,
+            firestore,
+            storageHelper,
+            cacheManager,
+            applicationContext
+        )
 
         // Initialize ViewModels
         loginViewModel = LoginViewModel(authRepository)
@@ -74,17 +101,36 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
         setContent {
+
+            val isConnected by connectivityState()
+            var wasConnected by remember { mutableStateOf(isConnected) }
+
+            // Update wasConnected when connection state changes
+            LaunchedEffect(isConnected) {
+                if (wasConnected != isConnected) {
+                    wasConnected = isConnected
+                }
+            }
+
             JewelleryAppTheme {
-                Surface(
-                    modifier = Modifier.background(Color.White)
-                ) {
-                    AppNavigation(
-                        loginViewModel,
-                        registerViewModel,
-                        homeViewModel,
-                        categoryViewModel,
-                        itemDetailViewModel,
-                        wishlistViewModel
+                Box {
+                    Surface(
+                        modifier = Modifier.background(Color.White)
+                    ) {
+                        AppNavigation(
+                            loginViewModel,
+                            registerViewModel,
+                            homeViewModel,
+                            categoryViewModel,
+                            itemDetailViewModel,
+                            wishlistViewModel
+                        )
+                    }
+
+                    // Add the connectivity popup at the top of the UI hierarchy
+                    ConnectivityPopup(
+                        isConnected = isConnected,
+                        modifier = Modifier.align(Alignment.TopCenter)
                     )
                 }
             }
@@ -122,21 +168,17 @@ fun AppNavigation(
         }
 
         // Home Screen
-        // Update HomeScreen call in AppNavigation
         composable("home") {
             HomeScreen(
                 viewModel = homeViewModel,
-                navController = navController, // Pass navController for bottom bar and drawer
+                navController = navController,
                 onCategoryClick = { categoryId ->
-                    // Navigate to category detail screen
                     navController.navigate("category/$categoryId")
                 },
                 onProductClick = { productId ->
-                    // Navigate to product detail screen
                     navController.navigate("itemDetail/$productId")
                 },
                 onCollectionClick = { collectionId ->
-                    // Navigate to collection screen
                     navController.navigate("collection/$collectionId")
                 }
             )
@@ -152,10 +194,10 @@ fun AppNavigation(
                 }
             )
         ) { backStackEntry ->
-            val categoryId = backStackEntry.arguments?.getString("categoryId") ?: ""
+            backStackEntry.arguments?.getString("categoryId") ?: ""
             CategoryScreenView(
                 viewModel = categoryViewModel,
-                navController = navController // Pass navController for bottom navigation
+                navController = navController
             )
         }
 
@@ -169,28 +211,18 @@ fun AppNavigation(
                 }
             )
         ) { backStackEntry ->
-            // Extract the product ID from navigation arguments
             val productId = backStackEntry.arguments?.getString("productId") ?: ""
-
-            // Display the Jewelry Product Screen
             JewelryProductScreen(
                 productId = productId,
                 viewModel = itemDetailViewModel,
-                navController = navController, // Pass navController for bottom navigation
+                navController = navController,
                 onBackClick = {
-                    // Navigate back to the previous screen
                     navController.popBackStack()
                 },
-                onShareClick = {
-                    // Handle share functionality (will be implemented later)
-                },
-                onAddToWishlistClick = {
-                    // This will be handled inside the viewModel's toggleWishlist function
-                },
+                onShareClick = {},
+                onAddToWishlistClick = {},
                 onProductClick = { selectedProductId ->
-                    // Navigate to the selected product's detail screen
                     navController.navigate("itemDetail/$selectedProductId") {
-                        // Pop up to the current product detail to avoid stacking multiple details
                         popUpTo("itemDetail/$productId") {
                             inclusive = true
                         }
@@ -199,7 +231,7 @@ fun AppNavigation(
             )
         }
 
-        // Collection Screen - Placeholder for future implementation
+        // Collection Screen
         composable(
             route = "collection/{collectionId}",
             arguments = listOf(
@@ -209,11 +241,10 @@ fun AppNavigation(
                 }
             )
         ) { backStackEntry ->
-            val collectionId = backStackEntry.arguments?.getString("collectionId") ?: ""
-            // For now, we'll redirect to categories screen as a placeholder
+            backStackEntry.arguments?.getString("collectionId") ?: ""
             CategoryScreenView(
                 viewModel = categoryViewModel,
-                navController = navController // Pass navController for bottom navigation
+                navController = navController
             )
         }
 
@@ -221,16 +252,70 @@ fun AppNavigation(
         composable("wishlist") {
             WishlistScreen(
                 viewModel = wishlistViewModel,
-                navController = navController // Pass navController for bottom navigation
+                navController = navController
             )
         }
 
-        // Profile Screen placeholder - this would be implemented in the future
+        // Profile Screen placeholder
         composable("profile") {
-            // For now, redirect to home since profile isn't implemented
             LaunchedEffect(Unit) {
                 navController.navigate("home")
             }
+        }
+    }
+}
+
+
+
+
+
+/**
+ * A composable that shows a popup message when network connectivity changes
+ */
+@Composable
+fun ConnectivityPopup(
+    isConnected: Boolean,
+    modifier: Modifier = Modifier
+) {
+    var showPopup by remember { mutableStateOf(false) }
+    var lastConnectionState by remember { mutableStateOf(isConnected) }
+
+    // Only show popup when connection state changes, not on initial composition
+    LaunchedEffect(isConnected) {
+        if (lastConnectionState != isConnected) {
+            showPopup = true
+            delay(3000) // Show popup for 3 seconds
+            showPopup = false
+        }
+        lastConnectionState = isConnected
+    }
+
+    AnimatedVisibility(
+        visible = showPopup,
+        enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+        exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut(),
+        modifier = modifier
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    if (isConnected) Color(0xFF4CAF50) else Color(0xFFE53935)
+                )
+                .padding(vertical = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = if (isConnected) {
+                    "Back online! Syncing latest data..."
+                } else {
+                    "No internet connection. Using cached data."
+                },
+                color = Color.White,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
         }
     }
 }

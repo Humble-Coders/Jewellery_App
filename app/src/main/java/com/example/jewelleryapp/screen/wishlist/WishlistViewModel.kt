@@ -5,11 +5,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.jewelleryapp.model.Category
 import com.example.jewelleryapp.model.Product
+import com.example.jewelleryapp.repository.CachedJewelryRepository
 import com.example.jewelleryapp.repository.JewelryRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 class WishlistViewModel(private val repository: JewelryRepository) : ViewModel() {
+    private val TAG = "WishlistViewModel"
+
     private val _wishlistItems = MutableStateFlow<List<Product>>(emptyList())
     val wishlistItems: StateFlow<List<Product>> = _wishlistItems
 
@@ -29,7 +32,7 @@ class WishlistViewModel(private val repository: JewelryRepository) : ViewModel()
     val error: StateFlow<String?> = _error
 
     init {
-        Log.d("WishlistViewModel", "Initializing WishlistViewModel")
+        Log.d(TAG, "Initializing WishlistViewModel")
         loadCategories()
         refreshWishlistItems()
     }
@@ -40,23 +43,17 @@ class WishlistViewModel(private val repository: JewelryRepository) : ViewModel()
                 _isLoading.value = true
                 _error.value = null  // Clear any previous errors
 
-                Log.d("WishlistViewModel", "Refreshing wishlist items")
+                Log.d(TAG, "Refreshing wishlist items")
 
-                // First add test items if wishlist is empty
-                try {
-                    //repository.addTestWishlistItemsIfEmpty()
-                    Log.d("WishlistViewModel", "Test items added successfully if needed")
-                } catch (e: Exception) {
-                    Log.e("WishlistViewModel", "Failed to add test items", e)
-                    // Continue anyway - we'll try to load whatever's in the wishlist
-                }
+                // First refresh wishlist cache in the repository
+                repository.refreshWishlistCache()
 
                 // Then load wishlist items
                 loadWishlistItems()
 
-                Log.d("WishlistViewModel", "Refresh complete")
+                Log.d(TAG, "Refresh complete")
             } catch (e: Exception) {
-                Log.e("WishlistViewModel", "Error during refresh", e)
+                Log.e(TAG, "Error during refresh", e)
                 _error.value = "Failed to load wishlist: ${e.message}"
             } finally {
                 _isLoading.value = false
@@ -69,12 +66,12 @@ class WishlistViewModel(private val repository: JewelryRepository) : ViewModel()
             try {
                 _isLoading.value = true
                 repository.getCategoryProducts(categoryId).collect { products ->
-                    Log.d("WishlistViewModel", "Loaded ${products.size} products for category: $categoryId")
+                    Log.d(TAG, "Loaded ${products.size} products for category: $categoryId")
                     _categoryProducts.value = products
                     filterWishlistItems()
                 }
             } catch (e: Exception) {
-                Log.e("WishlistViewModel", "Failed to load category products", e)
+                Log.e(TAG, "Failed to load category products", e)
                 _error.value = "Failed to load category products: ${e.message}"
             } finally {
                 _isLoading.value = false
@@ -87,11 +84,11 @@ class WishlistViewModel(private val repository: JewelryRepository) : ViewModel()
             try {
                 repository.getCategories().collect { fetchedCategories ->
                     _categories.value = fetchedCategories
-                    Log.d("WishlistViewModel", "Loaded ${fetchedCategories.size} categories")
+                    Log.d(TAG, "Loaded ${fetchedCategories.size} categories")
                 }
             } catch (e: Exception) {
                 _error.value = "Failed to load categories: ${e.message}"
-                Log.e("WishlistViewModel", "Failed to load categories", e)
+                Log.e(TAG, "Failed to load categories", e)
             }
         }
     }
@@ -112,16 +109,16 @@ class WishlistViewModel(private val repository: JewelryRepository) : ViewModel()
                 _isLoading.value = true
                 _error.value = null  // Clear any previous errors
 
-                Log.d("WishlistViewModel", "Starting to load wishlist items")
+                Log.d(TAG, "Starting to load wishlist items")
                 repository.getWishlistItems().collect { items ->
-                    Log.d("WishlistViewModel", "Received ${items.size} wishlist items")
+                    Log.d(TAG, "Received ${items.size} wishlist items")
 
                     if (items.isEmpty()) {
-                        Log.d("WishlistViewModel", "Wishlist is empty")
+                        Log.d(TAG, "Wishlist is empty")
                     }
 
                     items.forEach { product ->
-                        Log.d("WishlistViewModel", "Product: id=${product.id}, name=${product.name}, category=${product.category}, imageUrl=${product.imageUrl}")
+                        Log.d(TAG, "Product: id=${product.id}, name=${product.name}, category=${product.category}, imageUrl=${product.imageUrl}")
                     }
 
                     _allWishlistItems.value = items
@@ -132,7 +129,7 @@ class WishlistViewModel(private val repository: JewelryRepository) : ViewModel()
                     }
                 }
             } catch (e: Exception) {
-                Log.e("WishlistViewModel", "Failed to load wishlist items", e)
+                Log.e(TAG, "Failed to load wishlist items", e)
                 _error.value = "Failed to load wishlist items: ${e.message}"
                 _wishlistItems.value = emptyList()
                 _allWishlistItems.value = emptyList()
@@ -144,14 +141,14 @@ class WishlistViewModel(private val repository: JewelryRepository) : ViewModel()
 
     private fun filterWishlistItems() {
         val wishlistIds = _allWishlistItems.value.map { it.id }.toSet()
-        Log.d("WishlistViewModel", "Filtering items. Total wishlist items: ${wishlistIds.size}")
+        Log.d(TAG, "Filtering items. Total wishlist items: ${wishlistIds.size}")
 
         val filteredItems = when (_selectedCategory.value) {
             "All" -> _allWishlistItems.value
             else -> _categoryProducts.value.filter { it.id in wishlistIds }
         }
 
-        Log.d("WishlistViewModel", "Filtered to ${filteredItems.size} items for category: ${_selectedCategory.value}")
+        Log.d(TAG, "Filtered to ${filteredItems.size} items for category: ${_selectedCategory.value}")
         _wishlistItems.value = filteredItems
     }
 
@@ -159,7 +156,7 @@ class WishlistViewModel(private val repository: JewelryRepository) : ViewModel()
         viewModelScope.launch {
             try {
                 _isLoading.value = true
-                Log.d("WishlistViewModel", "Removing product $productId from wishlist")
+                Log.d(TAG, "Removing product $productId from wishlist")
 
                 // Call repository to remove from wishlist
                 repository.removeFromWishlist(productId)
@@ -168,10 +165,44 @@ class WishlistViewModel(private val repository: JewelryRepository) : ViewModel()
                 _allWishlistItems.value = _allWishlistItems.value.filter { it.id != productId }
                 _wishlistItems.value = _wishlistItems.value.filter { it.id != productId }
 
-                Log.d("WishlistViewModel", "Successfully removed product from wishlist")
+                Log.d(TAG, "Successfully removed product from wishlist")
             } catch (e: Exception) {
-                Log.e("WishlistViewModel", "Failed to remove from wishlist", e)
+                Log.e(TAG, "Failed to remove from wishlist", e)
                 _error.value = "Failed to remove from wishlist: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    // Force refresh all data - useful for pull-to-refresh functionality
+    fun forceRefreshData() {
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                _error.value = null
+
+                // If using CachedJewelryRepository, explicitly trigger a refresh
+                if (repository is CachedJewelryRepository) {
+                    Log.d(TAG, "Explicitly refreshing cache from ViewModel")
+                    repository.refreshData()
+                }
+
+                // Refresh wishlist cache in repository
+                repository.refreshWishlistCache()
+
+                // Reload data
+                loadCategories()
+                loadWishlistItems()
+
+                // Reload category products if a specific category is selected
+                if (_selectedCategory.value != "All") {
+                    loadCategoryProducts(_selectedCategory.value)
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Error during manual refresh", e)
+                _error.value = "Failed to refresh data: ${e.message}"
             } finally {
                 _isLoading.value = false
             }

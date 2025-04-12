@@ -44,6 +44,7 @@ import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.jewelleryapp.R
+import com.example.jewelleryapp.components.PullToRefreshScreen
 import com.example.jewelleryapp.model.Category
 import com.google.firebase.auth.FirebaseAuth
 import com.example.jewelleryapp.model.CarouselItem as CarouselItemModel
@@ -79,7 +80,6 @@ fun HomeScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
 
-    val scrollState = rememberScrollState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -97,52 +97,48 @@ fun HomeScreen(
             topBar = { TopAppbar("Gagan Jewellers", onMenuClick = { scope.launch { drawerState.open() } })},
             bottomBar = { BottomNavigationBar(navController = navController) }
         ) { paddingValues ->
-            if (isLoading) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = Color(0xFFB78628))
-                }
-            } else if (error != null) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
+            PullToRefreshScreen(
+                isRefreshing = isLoading,
+                onRefresh = { viewModel.refreshData() }
+            ) {
+                if (error != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(paddingValues),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "Something went wrong",
-                            color = Color.Red,
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Button(
-                            onClick = { viewModel.refreshData() },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFB78628)
-                            )
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
                         ) {
-                            Text("Try Again")
+                            Text(
+                                text = "Something went wrong",
+                                color = Color.Red,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(
+                                onClick = { viewModel.refreshData() },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFFB78628)
+                                )
+                            ) {
+                                Text("Try Again")
+                            }
                         }
                     }
-                }
-            } else {
-                Column(
-                    modifier = Modifier
-                        .padding(paddingValues)
-                        .verticalScroll(scrollState)
-                ) {
-                    ImageCarousel(carouselItems)
-                    CategoryRow(categories, onCategoryClick)
-                    FeaturedProductsSection(featuredProducts, viewModel,onProductClick)
-                    ThemedCollectionsSection(collections, onCollectionClick)
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .padding(paddingValues)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        ImageCarousel(carouselItems)
+                        CategoryRow(categories, onCategoryClick)
+                        FeaturedProductsSection(featuredProducts, viewModel, onProductClick)
+                        ThemedCollectionsSection(collections, onCollectionClick)
+                    }
                 }
             }
         }

@@ -1,15 +1,18 @@
 package com.example.jewelleryapp.screen.categoriesScreen
 
-// CategoriesViewModel.kt
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import com.example.jewelleryapp.model.Category
 import com.example.jewelleryapp.model.Collection
+import com.example.jewelleryapp.repository.CachedJewelryRepository
 import com.example.jewelleryapp.repository.JewelryRepository
 
-class CategoriesViewModel(private val repository: JewelryRepository) : ViewModel(){
+class CategoriesViewModel(private val repository: JewelryRepository) : ViewModel() {
+    private val TAG = "CategoriesViewModel"
+
     private val _categories = MutableStateFlow<List<Category>>(emptyList())
     val categories: StateFlow<List<Category>> = _categories
 
@@ -19,6 +22,9 @@ class CategoriesViewModel(private val repository: JewelryRepository) : ViewModel
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
 
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error
+
     init {
         loadCategories()
         loadCollections()
@@ -26,9 +32,17 @@ class CategoriesViewModel(private val repository: JewelryRepository) : ViewModel
 
     private fun loadCategories() {
         viewModelScope.launch {
-            _isLoading.value = true
-            repository.getCategories().collect { categories ->
-                _categories.value = categories
+            try {
+                _isLoading.value = true
+                _error.value = null
+
+                repository.getCategories().collect { categories ->
+                    _categories.value = categories
+                    _isLoading.value = false
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading categories", e)
+                _error.value = "Failed to load categories: ${e.message}"
                 _isLoading.value = false
             }
         }
@@ -36,8 +50,34 @@ class CategoriesViewModel(private val repository: JewelryRepository) : ViewModel
 
     private fun loadCollections() {
         viewModelScope.launch {
-            repository.getThemedCollections().collect { collections ->
-                _collections.value = collections
+            try {
+                repository.getThemedCollections().collect { collections ->
+                    _collections.value = collections
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading collections", e)
+                // Don't update error state here, as we still want to show categories
+                // even if collections fail to load
+            }
+        }
+    }
+
+    // Force refresh data - useful for pull-to-refresh functionality
+    fun refreshData() {
+        viewModelScope.launch {
+            try {
+                // If using CachedJewelryRepository, explicitly trigger a refresh
+                if (repository is CachedJewelryRepository) {
+                    Log.d(TAG, "Explicitly refreshing cache from ViewModel")
+                    repository.refreshData()
+                }
+
+                // Re-load data
+                loadCategories()
+                loadCollections()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error during manual refresh", e)
+                _error.value = "Failed to refresh data: ${e.message}"
             }
         }
     }
