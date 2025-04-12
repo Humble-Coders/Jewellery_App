@@ -81,4 +81,47 @@ class CategoriesViewModel(private val repository: JewelryRepository) : ViewModel
             }
         }
     }
+
+    suspend fun loadCachedDataSync(): Boolean {
+        try {
+            if (repository is CachedJewelryRepository) {
+                // Check if we have cached data
+                val cachedCategories = (repository.categoriesCache.value)
+                val cachedCollections = (repository.collectionsCache.value)
+
+                // Only consider cache valid if categories and collections exist
+                val hasCachedData = cachedCategories.isNotEmpty()
+
+                if (hasCachedData) {
+                    // Update StateFlows with cached data
+                    _categories.value = cachedCategories
+                    _collections.value = cachedCollections
+                    return true
+                }
+            }
+            return false
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading cached data synchronously", e)
+            return false
+        }
+    }
+
+    // Add this method to check for updates
+    fun checkForUpdates() {
+        viewModelScope.launch {
+            try {
+                if (repository is CachedJewelryRepository) {
+                    val cacheManager = (repository as CachedJewelryRepository).cacheManager
+                    val shouldRefresh = cacheManager.shouldRefreshCache()
+                    if (shouldRefresh) {
+                        _isLoading.value = true
+                        (repository as CachedJewelryRepository).refreshData()
+                        _isLoading.value = false
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking for updates", e)
+            }
+        }
+    }
 }

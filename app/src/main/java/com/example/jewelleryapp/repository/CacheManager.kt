@@ -61,33 +61,39 @@ class CacheManager(
 
     // Check if cache needs updating by comparing local and remote versions
 // Corrected version of shouldRefreshCache() in CacheManager.kt
+    private var cachedServerVersion: String? = null
+    private var serverVersionTimestamp: Long = 0
+    private val SERVER_VERSION_CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+
     suspend fun shouldRefreshCache(): Boolean {
         val localVersion = getLocalCacheVersion().first()
 
-        return try {
+        try {
+            // Check if we have a recent cached server version
+            val currentTime = System.currentTimeMillis()
+            if (cachedServerVersion != null &&
+                (currentTime - serverVersionTimestamp < SERVER_VERSION_CACHE_DURATION)) {
+                Log.d(TAG, "Using cached server version: $cachedServerVersion")
+                return cachedServerVersion != localVersion
+            }
+
+            // Otherwise get from Firestore
             val docRef = firestore.collection(METADATA_COLLECTION).document(CACHE_CONTROL_DOCUMENT)
             val document = docRef.get().await()
             val serverVersion = document.getString(VERSION_FIELD) ?: "0"
 
+            // Cache the result
+            cachedServerVersion = serverVersion
+            serverVersionTimestamp = currentTime
+
             Log.d(TAG, "Cache version check - Local: $localVersion, Server: $serverVersion")
+            return serverVersion != localVersion
 
-            val shouldRefresh = serverVersion != localVersion
-            if (shouldRefresh) {
-                Log.d(TAG, "Cache is outdated, refresh needed")
-                // Update local version immediately after checking, even before refresh
-                // This way we won't constantly check for updates
-                saveLocalCacheVersion(serverVersion)
-            } else {
-                Log.d(TAG, "Cache is up to date")
-            }
-
-            shouldRefresh
         } catch (e: Exception) {
             Log.e(TAG, "Error checking cache version, assuming refresh needed", e)
-            true // On error, assume we should refresh to be safe
+            return true // On error, assume we should refresh to be safe
         }
-    }
-    // Setup a listener for cache version changes
+    }    // Setup a listener for cache version changes
     fun listenForCacheVersionChanges(onVersionChange: (String) -> Unit) {
         val docRef = firestore.collection(METADATA_COLLECTION).document(CACHE_CONTROL_DOCUMENT)
 

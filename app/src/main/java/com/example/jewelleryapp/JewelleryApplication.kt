@@ -7,10 +7,14 @@ import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import coil.util.DebugLogger
 import com.example.jewelleryapp.repository.CacheManager
+import com.example.jewelleryapp.repository.CachedJewelryRepository
 import com.example.jewelleryapp.repository.FirebaseAdminHelper
+import com.example.jewelleryapp.repository.FirebaseStorageHelper
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class JewelryApplication : Application(), ImageLoaderFactory {
@@ -24,20 +28,43 @@ class JewelryApplication : Application(), ImageLoaderFactory {
         FirebaseAdminHelper(FirebaseFirestore.getInstance())
     }
 
+    // Add a repository for data refreshing
+    // Create repository
+    val jewelryRepository by lazy {
+        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+        CachedJewelryRepository(
+            userId,
+            FirebaseFirestore.getInstance(),
+            FirebaseStorageHelper(),
+            cacheManager,
+            applicationContext
+        )
+    }
+
     override fun onCreate() {
         super.onCreate()
 
-        // Initialize cache control document if needed
+        // Initialize with a delay to avoid blocking app startup
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                // First check if cache control exists
                 adminHelper.initializeCacheControlIfNeeded()
+
+                // Then check if cache needs refresh (without saving version prematurely)
+                checkCacheVersion()
+
             } catch (e: Exception) {
                 // Log but don't crash if this fails
                 e.printStackTrace()
             }
         }
     }
-
+    private suspend fun checkCacheVersion() {
+        if (cacheManager.shouldRefreshCache()) {
+            // If refresh is needed, refresh all data at once
+            (jewelryRepository as? CachedJewelryRepository)?.refreshData()
+        }
+    }
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
             .diskCache {
@@ -47,7 +74,7 @@ class JewelryApplication : Application(), ImageLoaderFactory {
                     .build()
             }
             .memoryCache {
-                MemoryCache.Builder(this) // Pass 'this' as context to MemoryCache.Builder
+                MemoryCache.Builder(this)
                     .maxSizePercent(0.25) // Use 25% of app memory
                     .build()
             }

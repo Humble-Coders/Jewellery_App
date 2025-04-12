@@ -25,16 +25,16 @@ class CachedJewelryRepository(
     private val userId: String,
     private val firestore: FirebaseFirestore,
     private val storageHelper: FirebaseStorageHelper,
-    private val cacheManager: CacheManager,
+    internal val cacheManager: CacheManager,
     private val context: Context
 ) : JewelryRepository(userId, firestore, storageHelper) {
     private val TAG = "CachedJewelryRepository"
 
     // Cache containers
-    private val categoriesCache = MutableStateFlow<List<Category>>(emptyList())
-    private val featuredProductsCache = MutableStateFlow<List<Product>>(emptyList())
-    private val collectionsCache = MutableStateFlow<List<Collection>>(emptyList())
-    private val carouselItemsCache = MutableStateFlow<List<CarouselItem>>(emptyList())
+    internal val categoriesCache = MutableStateFlow<List<Category>>(emptyList())
+    internal val featuredProductsCache = MutableStateFlow<List<Product>>(emptyList())
+    internal val collectionsCache = MutableStateFlow<List<Collection>>(emptyList())
+    internal val carouselItemsCache = MutableStateFlow<List<CarouselItem>>(emptyList())
 
     // Flag to prevent multiple simultaneous refreshes
     private var isRefreshing = false
@@ -70,6 +70,11 @@ class CachedJewelryRepository(
             isRefreshing = true
             Log.d(TAG, "Starting data refresh from Firestore")
 
+
+            val docRef = firestore.collection(CacheManager.METADATA_COLLECTION)
+                .document(CacheManager.CACHE_CONTROL_DOCUMENT)
+            val document = docRef.get().await()
+            val serverVersion = document.getString(CacheManager.VERSION_FIELD) ?: "0"
             // Refresh categories
             withContext(Dispatchers.IO) {
                 try {
@@ -123,10 +128,7 @@ class CachedJewelryRepository(
 
             // Update metadata document in Firestore to get latest cache version
             // From the refreshData() method in CachedJewelryRepository.kt
-            val docRef = firestore.collection(CacheManager.METADATA_COLLECTION)
-                .document(CacheManager.CACHE_CONTROL_DOCUMENT)
-            val document = docRef.get().await()
-            val serverVersion = document.getString(CacheManager.VERSION_FIELD) ?: "0"
+
 
 // Save the latest version locally
             cacheManager.saveLocalCacheVersion(serverVersion)
@@ -140,7 +142,17 @@ class CachedJewelryRepository(
     }
 
     // Check if cache should be refreshed and refresh if needed
+    // Use a time-based approach to limit checks
+    private var lastCacheCheckTime = 0L
+    private val CACHE_CHECK_INTERVAL = 60_000L // Check at most once per minute
+
     private suspend fun checkAndRefreshCache() {
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastCacheCheckTime < CACHE_CHECK_INTERVAL) {
+            return // Skip check if we checked recently
+        }
+
+        lastCacheCheckTime = currentTime
         try {
             if (cacheManager.shouldRefreshCache()) {
                 Log.d(TAG, "Cache is outdated, refreshing data")
@@ -170,7 +182,7 @@ class CachedJewelryRepository(
         }
 
         // Check if cache needs refreshing
-        checkAndRefreshCache()
+       // checkAndRefreshCache()
     }
 
     override suspend fun getFeaturedProducts(): Flow<List<Product>> = flow {
@@ -189,7 +201,7 @@ class CachedJewelryRepository(
         }
 
         // Check if cache needs refreshing
-        checkAndRefreshCache()
+       // checkAndRefreshCache()
     }
 
     override suspend fun getThemedCollections(): Flow<List<Collection>> = flow {
@@ -208,7 +220,7 @@ class CachedJewelryRepository(
         }
 
         // Check if cache needs refreshing
-        checkAndRefreshCache()
+       // checkAndRefreshCache()
     }
 
     override suspend fun getCarouselItems(): Flow<List<CarouselItem>> = flow {
@@ -227,7 +239,7 @@ class CachedJewelryRepository(
         }
 
         // Check if cache needs refreshing
-        checkAndRefreshCache()
+       // checkAndRefreshCache()
     }
 
     // For wishlist operations, we need to update the cache immediately
@@ -247,5 +259,73 @@ class CachedJewelryRepository(
         featuredProductsCache.value = featuredProductsCache.value.map {
             if (it.id == productId) it.copy(isFavorite = false) else it
         }
+    }
+
+
+    suspend fun getCategoriesSync(): List<Category> {
+        return if (categoriesCache.value.isNotEmpty()) {
+            categoriesCache.value
+        } else {
+            // Load from Firestore and cache
+            var result = emptyList<Category>()
+            super.getCategories().collect { categories ->
+                categoriesCache.value = categories
+                result = categories
+            }
+            result
+        }
+    }
+
+    suspend fun getFeaturedProductsSync(): List<Product> {
+        return if (featuredProductsCache.value.isNotEmpty()) {
+            featuredProductsCache.value
+        } else {
+            // Load from Firestore and cache
+            var result = emptyList<Product>()
+            super.getFeaturedProducts().collect { products ->
+                featuredProductsCache.value = products
+                result = products
+            }
+            result
+        }
+    }
+
+    suspend fun getCollectionsSync(): List<Collection> {
+        return if (collectionsCache.value.isNotEmpty()) {
+            collectionsCache.value
+        } else {
+            // Load from Firestore and cache
+            var result = emptyList<Collection>()
+            super.getThemedCollections().collect { collections ->
+                collectionsCache.value = collections
+                result = collections
+            }
+            result
+        }
+    }
+
+    suspend fun getCarouselItemsSync(): List<CarouselItem> {
+        return if (carouselItemsCache.value.isNotEmpty()) {
+            carouselItemsCache.value
+        } else {
+            // Load from Firestore and cache
+            var result = emptyList<CarouselItem>()
+            super.getCarouselItems().collect { items ->
+                carouselItemsCache.value = items
+                result = items
+            }
+            result
+        }
+    }
+
+    // Add a method to check if we have cache data for core elements
+    fun hasCachedData(): Boolean {
+        return categoriesCache.value.isNotEmpty() &&
+                featuredProductsCache.value.isNotEmpty() &&
+                collectionsCache.value.isNotEmpty()
+    }
+
+    suspend fun shouldRefreshCacheSync(): Boolean {
+        return cacheManager.shouldRefreshCache()
     }
 }

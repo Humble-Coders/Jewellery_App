@@ -10,14 +10,22 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -51,7 +60,11 @@ import com.example.jewelleryapp.screen.wishlist.WishlistViewModel
 import com.example.jewelleryapp.ui.theme.JewelleryAppTheme
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private lateinit var loginViewModel: LoginViewModel
@@ -60,6 +73,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var categoryViewModel: CategoriesViewModel
     private lateinit var itemDetailViewModel: ItemDetailViewModel
     private lateinit var wishlistViewModel: WishlistViewModel
+    private val _isInitialLoading = MutableStateFlow(true)
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -101,7 +116,7 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
         setContent {
-
+            val isInitialLoading by _isInitialLoading.collectAsState()
             val isConnected by connectivityState()
             var wasConnected by remember { mutableStateOf(isConnected) }
 
@@ -113,30 +128,74 @@ class MainActivity : ComponentActivity() {
             }
 
             JewelleryAppTheme {
-                Box {
-                    Surface(
-                        modifier = Modifier.background(Color.White)
-                    ) {
-                        AppNavigation(
-                            loginViewModel,
-                            registerViewModel,
-                            homeViewModel,
-                            categoryViewModel,
-                            itemDetailViewModel,
-                            wishlistViewModel
+                if (isInitialLoading) {
+                    LoadingScreen()
+                } else {
+                    Box {
+                        Surface(
+                            modifier = Modifier.background(Color.White)
+                        ) {
+                            AppNavigation(
+                                loginViewModel,
+                                registerViewModel,
+                                homeViewModel,
+                                categoryViewModel,
+                                itemDetailViewModel,
+                                wishlistViewModel
+                            )
+                        }
+
+                        ConnectivityPopup(
+                            isConnected = isConnected,
+                            modifier = Modifier.align(Alignment.TopCenter)
                         )
                     }
-
-                    // Add the connectivity popup at the top of the UI hierarchy
-                    ConnectivityPopup(
-                        isConnected = isConnected,
-                        modifier = Modifier.align(Alignment.TopCenter)
-                    )
                 }
+            }
+        }
+        loadAllData()
+
+    }
+    private fun loadAllData() {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                // First check if we have cache data available
+                val hasCachedData = homeViewModel.loadCachedDataSync() &&
+                        categoryViewModel.loadCachedDataSync()
+
+                if (hasCachedData) {
+                    // We have cache data, show UI immediately
+                    _isInitialLoading.value = false
+
+                    // Then check for updates in background
+                    launch {
+                        homeViewModel.checkForUpdates()
+                        categoryViewModel.checkForUpdates()
+                    }
+                } else {
+                    // No cache data, need to wait for network load
+                    homeViewModel.loadData()
+
+                    // Wait until homeViewModel has data
+                    while(homeViewModel.categories.value.isEmpty() &&
+                        homeViewModel.featuredProducts.value.isEmpty() &&
+                        homeViewModel.collections.value.isEmpty()) {
+                        delay(100)
+                        // Add timeout if needed
+                    }
+
+                    _isInitialLoading.value = false
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Error loading initial data", e)
+                // Show UI anyway after error
+                _isInitialLoading.value = false
             }
         }
     }
 }
+
+
 
 @Composable
 fun AppNavigation(
@@ -315,6 +374,30 @@ fun ConnectivityPopup(
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 16.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun LoadingScreen() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Image(
+                painter = painterResource(id = R.drawable.crown),
+                contentDescription = "Logo",
+                modifier = Modifier.size(80.dp)
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            CircularProgressIndicator(
+                color = Color(0xFFB78628) // Gold color
             )
         }
     }

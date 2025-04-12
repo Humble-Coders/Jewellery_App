@@ -214,4 +214,44 @@ class HomeViewModel(private val repository: JewelryRepository) : ViewModel() {
             }
         }
     }
+
+    suspend fun loadCachedDataSync(): Boolean {
+        try {
+            if (repository is CachedJewelryRepository && repository.hasCachedData()) {
+                _categories.value = repository.getCategoriesSync()
+
+                // Get featured products with wishlist status
+                val products = repository.getFeaturedProductsSync()
+                _featuredProducts.value = products
+
+                _collections.value = repository.getCollectionsSync()
+                _carouselItems.value = repository.getCarouselItemsSync()
+
+                return true
+            }
+            return false
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading cached data synchronously", e)
+            return false
+        }
+    }
+
+    // Check for updates without immediately changing UI
+    fun checkForUpdates() {
+        viewModelScope.launch {
+            try {
+                if (repository is CachedJewelryRepository) {
+                    val shouldRefresh = repository.shouldRefreshCacheSync()
+                    if (shouldRefresh) {
+                        _isLoading.value = true
+                        repository.refreshData()
+                        loadData() // Reload from updated cache
+                        _isLoading.value = false
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking for updates", e)
+            }
+        }
+    }
 }
